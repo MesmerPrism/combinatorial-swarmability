@@ -235,6 +235,20 @@ canvas {
   transform: rotate(45deg);
 }
 
+.mark-flock {
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+}
+
+.mark-cohere {
+  border: 3px double var(--group);
+}
+
+.mark-disperse {
+  border: 2px solid var(--accent);
+  transform: rotate(45deg);
+}
+
 .state-block,
 .controls {
   border: 1px solid var(--line);
@@ -378,20 +392,42 @@ a:focus-visible {
   border-color: var(--accent);
 }
 
+.behavior-buttons button:nth-child(1) {
+  border-color: var(--line-strong);
+}
+
+.behavior-buttons button:nth-child(2) {
+  border-color: var(--group);
+}
+
+.behavior-buttons button:nth-child(3) {
+  border-color: var(--accent);
+}
+
 .member-controls {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.45rem;
   margin-bottom: 0.75rem;
 }
 
 .member-control {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 1.65rem auto;
   align-items: center;
   min-width: 0;
   border: 1px solid var(--line);
   background: var(--bg);
+}
+
+.member-control abbr {
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  font: 700 0.76rem/1 var(--font-ui);
+  text-decoration: none;
 }
 
 .member-control button {
@@ -576,5 +612,9 @@ a:focus-visible {
   .action-status {
     border-color: Highlight;
   }
-}
 
+  .member-control abbr {
+    border-color: CanvasText;
+    color: CanvasText;
+  }
+}

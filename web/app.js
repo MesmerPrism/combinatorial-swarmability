@@ -1,8 +1,8 @@
-import init, { DemoEngine } from "./pkg/demo_wasm.js";
+import init, { DemoEngine } from "./pkg/demo_wasm.js?v=collective-behavior-v1";
 
 const DEFAULT_SEED = "2026";
-const ROW_WIDTH = 10;
 const SPEED_DELTA = 0.10;
+const RELATION_RADIUS_SQUARED = 0.34 * 0.34;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const canvas = document.querySelector("#swarm-canvas");
@@ -18,9 +18,13 @@ let rows = new Float32Array();
 let animationHandle = 0;
 let previousTimestamp = 0;
 let reducedTimestamp = 0;
+let rowWidth = 0;
 
-await init();
+await init({
+  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=collective-behavior-v1", import.meta.url),
+});
 engine = new DemoEngine(DEFAULT_SEED);
+rowWidth = DemoEngine.frame_row_width();
 createMemberControls(DemoEngine.member_count());
 bindControls();
 await loadSyntheticCatalog();
@@ -51,7 +55,11 @@ function createMemberControls(count) {
       dispatch({ type: "toggle_subgroup_member", member_id: memberId });
     });
     groupLabel.append(group);
-    wrapper.append(primary, groupLabel);
+    const behavior = document.createElement("abbr");
+    behavior.dataset.behaviorMemberId = String(memberId);
+    behavior.textContent = "F";
+    behavior.title = "Flock";
+    wrapper.append(primary, behavior, groupLabel);
     fragment.append(wrapper);
   }
   memberControls.append(fragment);
@@ -75,6 +83,15 @@ function bindControls() {
   });
   document.querySelector("#faster-button").addEventListener("click", () => {
     adjustSpeed(SPEED_DELTA);
+  });
+  document.querySelector("#flock-button").addEventListener("click", () => {
+    setBehavior("flock");
+  });
+  document.querySelector("#cohere-button").addEventListener("click", () => {
+    setBehavior("cohere");
+  });
+  document.querySelector("#disperse-button").addEventListener("click", () => {
+    setBehavior("disperse");
   });
   document.querySelector("#clear-subgroup-button").addEventListener("click", () => {
     dispatch({ type: "clear_subgroup" });
@@ -121,6 +138,14 @@ function adjustSpeed(delta) {
   dispatch({
     type: "adjust_speed",
     delta,
+    expected_selection_revision: state.selection_revision,
+  });
+}
+
+function setBehavior(behavior) {
+  dispatch({
+    type: "set_behavior",
+    behavior,
     expected_selection_revision: state.selection_revision,
   });
 }
@@ -213,12 +238,14 @@ function updateDomState(updateControls = true) {
   document.querySelector("#state-tick").textContent = String(state.tick);
   document.querySelector("#state-seed").textContent = state.seed;
   document.querySelector("#state-speed").textContent = state.average_speed.toFixed(3);
+  document.querySelector("#state-behaviors").textContent = behaviorMixLabel();
+  document.querySelector("#state-relations").textContent = String(relationCount());
   document.querySelector("#step-button").disabled = state.running;
   document.querySelector("#start-button").disabled = state.running;
   document.querySelector("#pause-button").disabled = !state.running;
   canvas.setAttribute(
     "aria-label",
-    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}.`
+    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}.`
   );
   updateMotionMode();
 
@@ -239,12 +266,19 @@ function updateMotionMode() {
 
 function updateMemberControls() {
   const subgroup = new Set(state.subgroup_members);
+  const members = new Map(state.members.map((member) => [member.member_id, member]));
   memberControls.querySelectorAll("button[data-member-id]").forEach((button) => {
     const memberId = Number(button.dataset.memberId);
     button.setAttribute("aria-pressed", String(state.primary_member === memberId));
   });
   memberControls.querySelectorAll("input[data-group-member-id]").forEach((input) => {
     input.checked = subgroup.has(Number(input.dataset.groupMemberId));
+  });
+  memberControls.querySelectorAll("abbr[data-behavior-member-id]").forEach((label) => {
+    const member = members.get(Number(label.dataset.behaviorMemberId));
+    const behavior = behaviorLabel(member?.behavior);
+    label.textContent = behavior.slice(0, 1);
+    label.title = behavior;
   });
 }
 
@@ -283,7 +317,38 @@ function draw() {
   context.fillStyle = "#fbf8f2";
   context.fillRect(0, 0, width, height);
   drawFieldLines(width, height);
-  forEachRow((row) => drawMember(row, width, height));
+  const projectedRows = [];
+  forEachRow((row) => projectedRows.push(row));
+  const wholeSwarmTargeted = projectedRows.every((row) => row[9] > 0.5);
+  if (wholeSwarmTargeted) {
+    context.save();
+    context.strokeStyle = "#463b69";
+    context.lineWidth = 4;
+    context.setLineDash([10, 8]);
+    context.strokeRect(10, 10, width - 20, height - 20);
+    context.restore();
+  }
+  drawRelations(projectedRows, width, height);
+  projectedRows.forEach((row) => drawMember(row, width, height, !wholeSwarmTargeted));
+}
+
+function drawRelations(projectedRows, width, height) {
+  relationEdges(projectedRows).forEach(([firstIndex, secondIndex]) => {
+    const first = projectedRows[firstIndex];
+    const second = projectedRows[secondIndex];
+    const sharedBehavior = Math.round(first[10]) === Math.round(second[10])
+      ? Math.round(first[10])
+      : 0;
+    context.save();
+    context.strokeStyle = ["#cfc4b7", "#718069", "#a95f4d"][sharedBehavior];
+    context.lineWidth = sharedBehavior === 0 ? 1.25 : 2;
+    context.setLineDash(sharedBehavior === 2 ? [8, 6] : sharedBehavior === 0 ? [2, 7] : []);
+    context.beginPath();
+    context.moveTo(((first[1] + 1) / 2) * width, ((1 - first[2]) / 2) * height);
+    context.lineTo(((second[1] + 1) / 2) * width, ((1 - second[2]) / 2) * height);
+    context.stroke();
+    context.restore();
+  });
 }
 
 function drawFieldLines(width, height) {
@@ -306,7 +371,7 @@ function drawFieldLines(width, height) {
   context.restore();
 }
 
-function drawMember(row, width, height) {
+function drawMember(row, width, height, showIndividualTarget) {
   const memberId = Math.round(row[0]);
   const x = ((row[1] + 1) / 2) * width;
   const y = ((1 - row[2]) / 2) * height;
@@ -314,11 +379,12 @@ function drawMember(row, width, height) {
   const primary = row[7] > 0.5;
   const subgroup = row[8] > 0.5;
   const targeted = row[9] > 0.5;
+  const behavior = Math.round(row[10]);
 
   context.save();
   context.translate(x, y);
 
-  if (targeted) {
+  if (targeted && showIndividualTarget) {
     context.strokeStyle = "#463b69";
     context.lineWidth = 3;
     context.setLineDash([5, 4]);
@@ -331,11 +397,10 @@ function drawMember(row, width, height) {
     context.strokeRect(-radius - 4, -radius - 4, radius * 2 + 8, radius * 2 + 8);
   }
 
-  context.fillStyle = primary ? "#8a4638" : "#d9a86c";
+  context.fillStyle = primary ? "#8a4638" : ["#d9a86c", "#9aae8f", "#d59b87"][behavior];
   context.strokeStyle = "#1e1713";
   context.lineWidth = primary ? 4 : 2;
-  context.beginPath();
-  context.arc(0, 0, radius, 0, Math.PI * 2);
+  drawBehaviorShape(radius, behavior);
   context.fill();
   context.stroke();
 
@@ -355,10 +420,84 @@ function drawMember(row, width, height) {
   context.restore();
 }
 
-function forEachRow(visitor) {
-  for (let offset = 0; offset + ROW_WIDTH <= rows.length; offset += ROW_WIDTH) {
-    visitor(rows.subarray(offset, offset + ROW_WIDTH));
+function drawBehaviorShape(radius, behavior) {
+  context.beginPath();
+  if (behavior === 1) {
+    for (let side = 0; side < 6; side += 1) {
+      const angle = -Math.PI / 2 + (side * Math.PI) / 3;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      if (side === 0) {
+        context.moveTo(x, y);
+      } else {
+        context.lineTo(x, y);
+      }
+    }
+    context.closePath();
+  } else if (behavior === 2) {
+    context.moveTo(0, -radius);
+    context.lineTo(radius, 0);
+    context.lineTo(0, radius);
+    context.lineTo(-radius, 0);
+    context.closePath();
+  } else {
+    context.arc(0, 0, radius, 0, Math.PI * 2);
   }
+}
+
+function forEachRow(visitor) {
+  for (let offset = 0; offset + rowWidth <= rows.length; offset += rowWidth) {
+    visitor(rows.subarray(offset, offset + rowWidth));
+  }
+}
+
+function relationCount() {
+  const projectedRows = [];
+  forEachRow((row) => projectedRows.push(row));
+  return relationEdges(projectedRows).length;
+}
+
+function relationEdges(projectedRows) {
+  const candidates = [];
+  for (let firstIndex = 0; firstIndex < projectedRows.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < projectedRows.length; secondIndex += 1) {
+      const dx = projectedRows[firstIndex][1] - projectedRows[secondIndex][1];
+      const dy = projectedRows[firstIndex][2] - projectedRows[secondIndex][2];
+      const distanceSquared = dx * dx + dy * dy;
+      if (distanceSquared <= RELATION_RADIUS_SQUARED) {
+        candidates.push([firstIndex, secondIndex, distanceSquared]);
+      }
+    }
+  }
+  candidates.sort((first, second) => first[2] - second[2]);
+  const degrees = new Uint8Array(projectedRows.length);
+  const edges = [];
+  candidates.forEach(([firstIndex, secondIndex]) => {
+    if (degrees[firstIndex] >= 3 || degrees[secondIndex] >= 3) {
+      return;
+    }
+    degrees[firstIndex] += 1;
+    degrees[secondIndex] += 1;
+    edges.push([firstIndex, secondIndex]);
+  });
+  return edges;
+}
+
+function behaviorMixLabel() {
+  const counts = state.behavior_counts;
+  return [
+    counts.flock > 0 ? `${counts.flock} flock` : "",
+    counts.cohere > 0 ? `${counts.cohere} cohere` : "",
+    counts.disperse > 0 ? `${counts.disperse} disperse` : "",
+  ].filter(Boolean).join(", ");
+}
+
+function behaviorLabel(behavior) {
+  return {
+    flock: "Flock",
+    cohere: "Cohere",
+    disperse: "Disperse",
+  }[behavior] ?? "Unknown";
 }
 
 function scopeLabel(scope) {
@@ -396,4 +535,3 @@ async function loadSyntheticCatalog() {
     // Static placeholder copy remains visible; no network or behavioral report is emitted.
   }
 }
-

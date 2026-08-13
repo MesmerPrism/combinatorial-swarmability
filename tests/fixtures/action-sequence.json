@@ -12,6 +12,10 @@
     "delta": -0.05,
     "expected_selection_revision": 2
   },
+  {
+    "type": "set_behavior",
+    "behavior": "cohere",
+    "expected_selection_revision": 2
+  },
   { "type": "start" }
 ]
-

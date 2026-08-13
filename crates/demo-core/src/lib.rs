@@ -5,6 +5,7 @@ mod engine;
 mod rng;
 
 pub use action::{
-    ActionCode, ActionReceipt, MemberSummary, PublicState, SemanticAction, TargetScope,
+    ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, MemberSummary, PublicState,
+    SemanticAction, TargetScope,
 };
 pub use engine::{DemoCore, DemoError, FRAME_ROW_WIDTH, MEMBER_COUNT};

@@ -12,6 +12,18 @@ pub enum TargetScope {
     Swarm,
 }
 
+/// Collective steering rule assigned independently to each member.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CollectiveBehavior {
+    /// Align with nearby headings while maintaining local spacing.
+    Flock,
+    /// Move toward members sharing the cohere rule while maintaining separation.
+    Cohere,
+    /// Move away from members sharing the disperse rule or from the swarm centre.
+    Disperse,
+}
+
 /// Input-modality-free action accepted by the app-local reducer.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -37,6 +49,13 @@ pub enum SemanticAction {
     AdjustSpeed {
         /// Signed speed change in world units per second.
         delta: f32,
+        /// Selection revision against which the action was prepared.
+        expected_selection_revision: u64,
+    },
+    /// Assign one collective steering rule to the resolved targets.
+    SetBehavior {
+        /// Collective steering rule to assign.
+        behavior: CollectiveBehavior,
         /// Selection revision against which the action was prepared.
         expected_selection_revision: u64,
     },
@@ -72,6 +91,10 @@ enum SemanticActionWire {
         delta: f32,
         expected_selection_revision: u64,
     },
+    SetBehavior {
+        behavior: CollectiveBehavior,
+        expected_selection_revision: u64,
+    },
     Start {},
     Pause {},
     Step {},
@@ -100,6 +123,13 @@ impl<'de> Deserialize<'de> for SemanticAction {
                 delta,
                 expected_selection_revision,
             },
+            SemanticActionWire::SetBehavior {
+                behavior,
+                expected_selection_revision,
+            } => Self::SetBehavior {
+                behavior,
+                expected_selection_revision,
+            },
             SemanticActionWire::Start {} => Self::Start,
             SemanticActionWire::Pause {} => Self::Pause,
             SemanticActionWire::Step {} => Self::Step,
@@ -123,6 +153,8 @@ pub enum ActionCode {
     SubgroupCleared,
     /// Preferred speed changed for all resolved targets.
     SpeedAdjusted,
+    /// Collective steering rule changed for all resolved targets.
+    BehaviorSet,
     /// Motion started.
     Started,
     /// Motion paused.
@@ -175,6 +207,19 @@ pub struct MemberSummary {
     pub subgroup_selected: bool,
     /// Whether the current scope targets this member.
     pub targeted: bool,
+    /// Collective steering rule currently assigned to this member.
+    pub behavior: CollectiveBehavior,
+}
+
+/// Count of members currently assigned to each collective steering rule.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct BehaviorCounts {
+    /// Members using local alignment and spacing.
+    pub flock: usize,
+    /// Members steering toward their cohere peers.
+    pub cohere: usize,
+    /// Members steering away from their disperse peers.
+    pub disperse: usize,
 }
 
 /// Public state projected outside the high-rate canvas.
@@ -196,6 +241,8 @@ pub struct PublicState {
     pub target_members: Vec<u16>,
     /// Current average particle speed.
     pub average_speed: f32,
+    /// Current distribution of collective steering rules.
+    pub behavior_counts: BehaviorCounts,
     /// Monotonic application-state revision.
     pub state_revision: u64,
     /// Monotonic selection-only revision.

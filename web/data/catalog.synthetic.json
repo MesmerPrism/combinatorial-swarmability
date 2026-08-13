@@ -5,9 +5,9 @@
   "items": [
     {
       "public_id": "scope-reconstruction-001",
-      "title": "One action across three target scopes",
-      "summary": "A synthetic browser scene reconstructs the architectural distinction between input route and target scope.",
-      "semantic_action": "adjust_preferred_speed",
+      "title": "Collective rules across three target scopes",
+      "summary": "A synthetic browser scene reconstructs how scope-aware steering rules can alter local swarm relationships independently from input route.",
+      "semantic_action": "assign_collective_behavior",
       "target_scopes": ["member", "subgroup", "swarm"],
       "evidence_class": "synthetic reconstruction",
       "reconstruction": true,
@@ -18,4 +18,3 @@
     }
   ]
 }
-

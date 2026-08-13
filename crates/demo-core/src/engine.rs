@@ -6,14 +6,15 @@ use rusty_matter_particles::{ParticleRenderPayload, ParticleSet, ParticleState};
 use serde::{Deserialize, Serialize};
 
 use crate::action::{
-    ActionCode, ActionReceipt, MemberSummary, PublicState, SemanticAction, TargetScope,
+    ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, MemberSummary, PublicState,
+    SemanticAction, TargetScope,
 };
 use crate::rng::SplitMix64;
 
 /// Number of members in the first public scene.
 pub const MEMBER_COUNT: usize = 24;
 /// Number of `f32` values in each Wasm frame row.
-pub const FRAME_ROW_WIDTH: usize = 10;
+pub const FRAME_ROW_WIDTH: usize = 11;
 
 const DEFAULT_SUBGROUP_COUNT: usize = 6;
 const MEMBER_COUNT_F32: f32 = 24.0;
@@ -27,6 +28,8 @@ const MAX_SPEED: f32 = 1.10;
 const MAX_SPEED_OFFSET: f32 = 0.70;
 const NEIGHBOR_RADIUS_SQUARED: f32 = 0.42 * 0.42;
 const SEPARATION_RADIUS_SQUARED: f32 = 0.13 * 0.13;
+const DISPERSE_RADIUS_SQUARED: f32 = 0.55 * 0.55;
+const SOFT_WORLD_LIMIT: f32 = 0.78;
 
 /// Error returned when a deterministic snapshot or Matter payload is invalid.
 #[derive(Debug)]
@@ -62,6 +65,7 @@ struct DemoSnapshot {
     seed: u64,
     particles: ParticleSet,
     speed_offsets: Vec<f32>,
+    behaviors: Vec<CollectiveBehavior>,
     scope: TargetScope,
     primary_member: Option<u16>,
     subgroup_members: Vec<u16>,
@@ -122,6 +126,10 @@ impl DemoCore {
                 delta,
                 expected_selection_revision,
             } => self.adjust_speed(delta, expected_selection_revision),
+            SemanticAction::SetBehavior {
+                behavior,
+                expected_selection_revision,
+            } => self.set_behavior(behavior, expected_selection_revision),
             SemanticAction::Start => self.start(),
             SemanticAction::Pause => self.pause(),
             SemanticAction::Step => self.step_action(),
@@ -166,6 +174,11 @@ impl DemoCore {
             .copied()
             .collect::<BTreeSet<_>>();
         let mut speed_total = 0.0;
+        let mut behavior_counts = BehaviorCounts {
+            flock: 0,
+            cohere: 0,
+            disperse: 0,
+        };
         let members = self
             .snapshot
             .particles
@@ -175,13 +188,20 @@ impl DemoCore {
             .map(|(index, particle)| {
                 let member_id = member_id(index);
                 let speed = round_for_public(particle.velocity.length());
+                let behavior = self.snapshot.behaviors[index];
                 speed_total += speed;
+                match behavior {
+                    CollectiveBehavior::Flock => behavior_counts.flock += 1,
+                    CollectiveBehavior::Cohere => behavior_counts.cohere += 1,
+                    CollectiveBehavior::Disperse => behavior_counts.disperse += 1,
+                }
                 MemberSummary {
                     member_id,
                     speed,
                     primary_selected: self.snapshot.primary_member == Some(member_id),
                     subgroup_selected: subgroup_set.contains(&member_id),
                     targeted: target_set.contains(&member_id),
+                    behavior,
                 }
             })
             .collect();
@@ -194,6 +214,7 @@ impl DemoCore {
             subgroup_members: self.snapshot.subgroup_members.clone(),
             target_members: targets,
             average_speed: round_for_public(speed_total / MEMBER_COUNT_F32),
+            behavior_counts,
             state_revision: self.snapshot.state_revision,
             selection_revision: self.snapshot.selection_revision,
             members,
@@ -241,6 +262,7 @@ impl DemoCore {
                 bool_marker(self.snapshot.primary_member == Some(member_id)),
                 bool_marker(subgroup.contains(&member_id)),
                 bool_marker(targets.contains(&member_id)),
+                behavior_code(self.snapshot.behaviors[index]),
             ]);
         }
         Ok(rows)
@@ -347,6 +369,38 @@ impl DemoCore {
         )
     }
 
+    fn set_behavior(
+        &mut self,
+        behavior: CollectiveBehavior,
+        expected_selection_revision: u64,
+    ) -> ActionReceipt {
+        if expected_selection_revision != self.snapshot.selection_revision {
+            return self.rejected(
+                ActionCode::StaleSelection,
+                "Selection changed before the collective rule was applied.",
+            );
+        }
+        let targets = self.resolved_targets();
+        if targets.is_empty() {
+            return self.rejected(
+                ActionCode::EmptySelection,
+                "The current scope has no selected members.",
+            );
+        }
+        for member_id in &targets {
+            self.snapshot.behaviors[usize::from(*member_id)] = behavior;
+        }
+        self.bump_state();
+        self.accepted(
+            ActionCode::BehaviorSet,
+            format!(
+                "Assigned {behavior:?} steering to {} member(s).",
+                targets.len()
+            ),
+            targets,
+        )
+    }
+
     fn start(&mut self) -> ActionReceipt {
         if !self.snapshot.running {
             self.snapshot.running = true;
@@ -413,6 +467,7 @@ impl DemoCore {
 
     fn step_simulation(&mut self) {
         let source = self.snapshot.particles.particles.clone();
+        let swarm_centroid = particle_centroid(&source);
         let mut next = source.clone();
         for (index, particle) in source.iter().enumerate() {
             let mut neighbor_count = 0_u16;
@@ -436,19 +491,57 @@ impl DemoCore {
                 }
             }
 
-            let mut acceleration = Vec3::ZERO;
+            let target_speed =
+                (BASE_SPEED + self.snapshot.speed_offsets[index]).clamp(MIN_SPEED, MAX_SPEED);
+            let mut flock_acceleration = Vec3::ZERO;
             if neighbor_count > 0 {
                 let inverse_count = 1.0 / f32::from(neighbor_count);
                 alignment = alignment * inverse_count;
                 cohesion = cohesion * inverse_count;
-                acceleration = (alignment - particle.velocity) * 0.44
-                    + (cohesion - particle.position) * 0.30
-                    + separation * 0.014;
+                flock_acceleration = (alignment - particle.velocity) * 0.68
+                    + (cohesion - particle.position) * 0.46
+                    + separation * 0.028;
             }
 
+            let behavior = self.snapshot.behaviors[index];
+            let (behavior_centroid, behavior_peer_count) =
+                peer_behavior_centroid(&source, &self.snapshot.behaviors, behavior, index)
+                    .unwrap_or((swarm_centroid, 1));
+            let behavior_acceleration = match behavior {
+                CollectiveBehavior::Flock => flock_acceleration,
+                CollectiveBehavior::Cohere => {
+                    let centroid_offset = behavior_centroid - particle.position;
+                    let settle_radius =
+                        (f32::from(behavior_peer_count).sqrt() * 0.085).clamp(0.18, 0.42);
+                    let collective_steering = if centroid_offset.length() > settle_radius {
+                        normalized_or(centroid_offset, particle.velocity) * target_speed
+                            - particle.velocity
+                    } else {
+                        Vec3::ZERO
+                    };
+                    flock_acceleration * 0.52 + collective_steering * 1.7 + separation * 0.11
+                }
+                CollectiveBehavior::Disperse => {
+                    let peer_dispersion =
+                        peer_dispersion_vector(&source, &self.snapshot.behaviors, behavior, index);
+                    let dispersion = if peer_dispersion.length_squared() > f32::EPSILON {
+                        peer_dispersion
+                    } else {
+                        particle.position - swarm_centroid
+                    };
+                    let collective_steering = if dispersion.length_squared() > f32::EPSILON {
+                        normalized_or(dispersion, particle.velocity) * target_speed
+                            - particle.velocity
+                    } else {
+                        Vec3::ZERO
+                    };
+                    flock_acceleration * 0.38 + collective_steering * 2.4 + separation * 0.055
+                }
+            };
+            let acceleration = behavior_acceleration
+                + soft_boundary_acceleration(particle.position, particle.velocity, target_speed);
+
             let mut velocity = particle.velocity + acceleration * FIXED_STEP_SECONDS;
-            let target_speed =
-                (BASE_SPEED + self.snapshot.speed_offsets[index]).clamp(MIN_SPEED, MAX_SPEED);
             velocity = normalized_or(velocity, particle.velocity) * target_speed;
             let mut position = particle.position + velocity * FIXED_STEP_SECONDS;
             contain_axis(&mut position.x, &mut velocity.x);
@@ -524,6 +617,68 @@ const fn bool_marker(value: bool) -> f32 {
     }
 }
 
+const fn behavior_code(behavior: CollectiveBehavior) -> f32 {
+    match behavior {
+        CollectiveBehavior::Flock => 0.0,
+        CollectiveBehavior::Cohere => 1.0,
+        CollectiveBehavior::Disperse => 2.0,
+    }
+}
+
+fn particle_centroid(particles: &[ParticleState]) -> Vec3 {
+    let sum = particles.iter().fold(Vec3::ZERO, |centroid, particle| {
+        centroid + particle.position
+    });
+    sum / MEMBER_COUNT_F32
+}
+
+fn peer_behavior_centroid(
+    particles: &[ParticleState],
+    behaviors: &[CollectiveBehavior],
+    behavior: CollectiveBehavior,
+    member_index: usize,
+) -> Option<(Vec3, u16)> {
+    let mut sum = Vec3::ZERO;
+    let mut count = 0_u16;
+    for (index, particle) in particles.iter().enumerate() {
+        if index != member_index && behaviors[index] == behavior {
+            sum = sum + particle.position;
+            count += 1;
+        }
+    }
+    (count > 0).then(|| (sum / f32::from(count), count))
+}
+
+fn peer_dispersion_vector(
+    particles: &[ParticleState],
+    behaviors: &[CollectiveBehavior],
+    behavior: CollectiveBehavior,
+    member_index: usize,
+) -> Vec3 {
+    let member = &particles[member_index];
+    particles
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != member_index && behaviors[*index] == behavior)
+        .fold(Vec3::ZERO, |dispersion, (_, peer)| {
+            let away = member.position - peer.position;
+            let distance_squared = away.length_squared();
+            if distance_squared > f32::EPSILON && distance_squared < DISPERSE_RADIUS_SQUARED {
+                dispersion + away / distance_squared.max(0.000_1)
+            } else {
+                dispersion
+            }
+        })
+}
+
+fn soft_boundary_acceleration(position: Vec3, velocity: Vec3, target_speed: f32) -> Vec3 {
+    if position.x.abs() <= SOFT_WORLD_LIMIT && position.y.abs() <= SOFT_WORLD_LIMIT {
+        return Vec3::ZERO;
+    }
+    let desired = normalized_or(Vec3::ZERO - position, velocity) * target_speed;
+    (desired - velocity) * 6.0
+}
+
 fn initial_snapshot(seed: u64) -> DemoSnapshot {
     let mut rng = SplitMix64::new(seed);
     let mut particles =
@@ -550,6 +705,7 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
         seed,
         particles,
         speed_offsets: vec![0.0; MEMBER_COUNT],
+        behaviors: vec![CollectiveBehavior::Flock; MEMBER_COUNT],
         scope: TargetScope::Member,
         primary_member: Some(0),
         subgroup_members: (0..DEFAULT_SUBGROUP_COUNT).map(member_id).collect(),
@@ -576,6 +732,11 @@ fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
             .any(|value| !value.is_finite() || value.abs() > MAX_SPEED_OFFSET)
     {
         return Err(DemoError::InvalidSnapshot("invalid speed offsets"));
+    }
+    if snapshot.behaviors.len() != MEMBER_COUNT {
+        return Err(DemoError::InvalidSnapshot(
+            "unexpected collective-behavior count",
+        ));
     }
     if snapshot
         .primary_member

@@ -1,13 +1,21 @@
 //! Integration coverage for the deterministic core and Matter handoff.
 
 use combinatorial_swarmability_demo_core::{
-    ActionCode, DemoCore, SemanticAction, TargetScope, FRAME_ROW_WIDTH, MEMBER_COUNT,
+    ActionCode, CollectiveBehavior, DemoCore, SemanticAction, TargetScope, FRAME_ROW_WIDTH,
+    MEMBER_COUNT,
 };
 use sha2::{Digest, Sha256};
 
 fn adjust(delta: f32, revision: u64) -> SemanticAction {
     SemanticAction::AdjustSpeed {
         delta,
+        expected_selection_revision: revision,
+    }
+}
+
+fn set_behavior(behavior: CollectiveBehavior, revision: u64) -> SemanticAction {
+    SemanticAction::SetBehavior {
+        behavior,
         expected_selection_revision: revision,
     }
 }
@@ -36,6 +44,31 @@ fn same_speed_action_resolves_member_subgroup_and_swarm_scopes() {
 }
 
 #[test]
+fn same_collective_rule_resolves_member_subgroup_and_swarm_scopes() {
+    let mut core = DemoCore::new(17);
+    let revision = core.public_state().selection_revision;
+    let member = core.dispatch(set_behavior(CollectiveBehavior::Cohere, revision));
+    assert_eq!(member.changed_member_ids, vec![0]);
+    assert_eq!(core.public_state().behavior_counts.cohere, 1);
+
+    let _ = core.dispatch(SemanticAction::SetScope {
+        scope: TargetScope::Subgroup,
+    });
+    let revision = core.public_state().selection_revision;
+    let subgroup = core.dispatch(set_behavior(CollectiveBehavior::Disperse, revision));
+    assert_eq!(subgroup.changed_member_ids, vec![0, 1, 2, 3, 4, 5]);
+    assert_eq!(core.public_state().behavior_counts.disperse, 6);
+
+    let _ = core.dispatch(SemanticAction::SetScope {
+        scope: TargetScope::Swarm,
+    });
+    let revision = core.public_state().selection_revision;
+    let swarm = core.dispatch(set_behavior(CollectiveBehavior::Flock, revision));
+    assert_eq!(swarm.changed_member_ids.len(), MEMBER_COUNT);
+    assert_eq!(core.public_state().behavior_counts.flock, MEMBER_COUNT);
+}
+
+#[test]
 fn invalid_empty_and_stale_selections_fail_closed() {
     let mut core = DemoCore::new(11);
     let invalid = core.dispatch(SemanticAction::SelectMember { member_id: 99 });
@@ -55,6 +88,42 @@ fn invalid_empty_and_stale_selections_fail_closed() {
     let empty = core.dispatch(adjust(0.1, revision));
     assert!(!empty.accepted);
     assert_eq!(empty.code, ActionCode::EmptySelection);
+
+    let empty_behavior = core.dispatch(set_behavior(CollectiveBehavior::Cohere, revision));
+    assert!(!empty_behavior.accepted);
+    assert_eq!(empty_behavior.code, ActionCode::EmptySelection);
+}
+
+#[test]
+fn collective_rules_change_pairwise_swarm_structure() {
+    let mut cohere = DemoCore::new(303);
+    let initial_distance = mean_pair_distance(&cohere.frame_rows().expect("frame rows project"));
+    let _ = cohere.dispatch(SemanticAction::SetScope {
+        scope: TargetScope::Swarm,
+    });
+    let revision = cohere.public_state().selection_revision;
+    let _ = cohere.dispatch(set_behavior(CollectiveBehavior::Cohere, revision));
+    let _ = cohere.dispatch(SemanticAction::Start);
+    for _ in 0..20 {
+        let _ = cohere.advance_elapsed(128);
+    }
+    let cohere_distance = mean_pair_distance(&cohere.frame_rows().expect("frame rows project"));
+
+    let mut disperse = DemoCore::new(303);
+    let _ = disperse.dispatch(SemanticAction::SetScope {
+        scope: TargetScope::Swarm,
+    });
+    let revision = disperse.public_state().selection_revision;
+    let _ = disperse.dispatch(set_behavior(CollectiveBehavior::Disperse, revision));
+    let _ = disperse.dispatch(SemanticAction::Start);
+    for _ in 0..20 {
+        let _ = disperse.advance_elapsed(128);
+    }
+    let disperse_distance = mean_pair_distance(&disperse.frame_rows().expect("frame rows project"));
+
+    assert!(cohere_distance < initial_distance * 0.90);
+    assert!(disperse_distance > initial_distance * 1.05);
+    assert!(disperse_distance > cohere_distance * 1.20);
 }
 
 #[test]
@@ -135,4 +204,20 @@ fn seeded_golden_hash_matches_fixture() {
     let actual = format!("{:x}", Sha256::digest(snapshot.as_bytes()));
     let expected = include_str!("../../../tests/fixtures/deterministic-seed-2026.sha256").trim();
     assert_eq!(actual, expected);
+}
+
+fn mean_pair_distance(rows: &[f32]) -> f32 {
+    let positions = rows
+        .chunks_exact(FRAME_ROW_WIDTH)
+        .map(|row| (row[1], row[2]))
+        .collect::<Vec<_>>();
+    let mut total = 0.0;
+    let mut pairs = 0_u16;
+    for (index, first) in positions.iter().enumerate() {
+        for second in &positions[index + 1..] {
+            total += ((first.0 - second.0).powi(2) + (first.1 - second.1).powi(2)).sqrt();
+            pairs += 1;
+        }
+    }
+    total / f32::from(pairs)
 }

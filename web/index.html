@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="An accessible deterministic reconstruction for addressing one swarm member, a subgroup, or the whole swarm.">
+    <meta name="description" content="An accessible deterministic swarm reconstruction with scope-aware flocking, cohesion, and dispersion.">
     <meta name="color-scheme" content="light">
     <title>Combinatorial Swarmability</title>
     <link rel="stylesheet" href="./styles.css">
@@ -26,9 +26,9 @@
         <p class="plain-label">Accessible browser reconstruction</p>
         <h1 id="page-title">Combinatorial Swarmability</h1>
         <p class="lede">
-          Apply one speed action to one member, a chosen group, or the whole swarm.
-          Pointer, keyboard, and low-rate controls share the same semantic action;
-          target scope changes separately.
+          Give one member, a chosen group, or the whole swarm a collective rule:
+          flock, cohere, or disperse. Members continuously sense their neighbours;
+          target scope changes who adopts the rule, not how it is requested.
         </p>
         <p class="boundary-note">
           This synthetic scene is a reconstruction, not an original authors’
@@ -40,7 +40,7 @@
       <section id="demonstration" class="demo shell" aria-labelledby="demo-title">
         <div class="section-heading">
           <h2 id="demo-title">Addressing scope</h2>
-          <p>Start intentionally, select members, choose a scope, then adjust speed.</p>
+          <p>Start intentionally, select members, choose a scope, then assign a collective response.</p>
         </div>
 
         <div class="demo-layout">
@@ -54,14 +54,18 @@
                 aria-describedby="canvas-description"
               ></canvas>
               <p id="canvas-description" class="sr-only">
-                A paused two-dimensional synthetic swarm. Select members with the
-                controls below or point at a member on the canvas. Primary selection,
-                subgroup selection, and current targets also appear as text.
+                A two-dimensional synthetic swarm, initially paused. Lines show local
+                neighbour relations, while member shape indicates flock, cohere, or
+                disperse. Select members with the controls below or point at a member
+                on the canvas. Equivalent state also appears as text.
               </p>
               <div class="canvas-key" aria-hidden="true">
                 <span><i class="mark mark-primary"></i> Primary</span>
                 <span><i class="mark mark-group"></i> Subgroup</span>
                 <span><i class="mark mark-target"></i> Current target</span>
+                <span><i class="mark mark-flock"></i> Flock</span>
+                <span><i class="mark mark-cohere"></i> Cohere</span>
+                <span><i class="mark mark-disperse"></i> Disperse</span>
               </div>
             </div>
 
@@ -76,6 +80,8 @@
                 <div><dt>Seed</dt><dd id="state-seed">2026</dd></div>
                 <div><dt>Average speed</dt><dd id="state-speed">0.360</dd></div>
                 <div><dt>Update mode</dt><dd id="state-motion-mode">Standard</dd></div>
+                <div><dt>Collective rules</dt><dd id="state-behaviors">24 flock</dd></div>
+                <div><dt>Neighbour links</dt><dd id="state-relations">0</dd></div>
               </dl>
               <p id="action-status" class="action-status" role="status" aria-live="polite">
                 Ready. Motion will not begin until Start is pressed.
@@ -106,8 +112,21 @@
             </fieldset>
 
             <fieldset>
+              <legend>Collective response</legend>
+              <p class="control-help">
+                Assign one steering rule to the active scope. Start motion to see
+                members reshape their relationships.
+              </p>
+              <div class="button-row behavior-buttons">
+                <button id="flock-button" type="button">Flock</button>
+                <button id="cohere-button" type="button">Cohere</button>
+                <button id="disperse-button" type="button">Disperse</button>
+              </div>
+            </fieldset>
+
+            <fieldset>
               <legend>Speed action</legend>
-              <p class="control-help">The same action is applied to the active scope.</p>
+              <p class="control-help">Adjust pace without changing the assigned collective rule.</p>
               <div class="button-row action-buttons">
                 <button id="slower-button" type="button">Slower</button>
                 <button id="faster-button" type="button">Faster</button>
@@ -145,14 +164,16 @@
             <h3>Independent dimensions</h3>
             <p>
               A pointer click, a focused member control, and a low-rate button all
-              become the same semantic requests. The current target scope—not the
-              input device—decides which members receive the action.
+              become semantic requests. The current target scope—not the input
+              device—decides which members receive a collective rule.
             </p>
           </article>
           <article>
             <h3>Reusable Rust boundary</h3>
             <p>
-              A deterministic Rust core produces Rusty Matter particle payloads.
+              A deterministic Rust core resolves local alignment, cohesion,
+              separation, and per-member collective rules before producing Rusty
+              Matter particle payloads.
               Canvas drawing and DOM accessibility remain browser adapters, so a
               later headset route can reuse the core without importing browser code.
             </p>
@@ -178,7 +199,6 @@
     <noscript>
       <p class="noscript-note">JavaScript and WebAssembly are required for the interactive reconstruction.</p>
     </noscript>
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./app.js?v=collective-behavior-v1"></script>
   </body>
 </html>
-

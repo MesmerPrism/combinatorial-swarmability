@@ -1,12 +1,15 @@
 # Combinatorial Swarmability
 
-An accessible, deterministic browser reconstruction for examining how one
-semantic action can address one swarm member, a selected subgroup, or the
-whole swarm. Changing input route does not change target scope or authority.
+An accessible, deterministic browser reconstruction for examining how
+collective steering rules can address one swarm member, a selected subgroup,
+or the whole swarm. Changing input route does not change target scope or
+authority.
 
 The first slice is intentionally narrow. Pointer, keyboard, and low-rate
 button controls all dispatch the same app-owned semantic actions into a Rust
-core. The core projects simulation state through Rusty Matter's
+core. Members continuously combine local alignment, cohesion, and separation
+with an assigned `flock`, `cohere`, or `disperse` rule. The core projects
+simulation state through Rusty Matter's
 renderer-neutral `ParticleRenderPayload`; a thin WebAssembly adapter exposes a
 bounded frame buffer to a Canvas2D renderer. The canvas is not the only
 information or interaction surface.
@@ -45,4 +48,3 @@ server.
 Project-owned source and documentation are licensed under
 `AGPL-3.0-or-later`. Dependencies and external references retain their own
 licenses and authority.
-
