@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="An accessible deterministic reconstruction for addressing one swarm member, a subgroup, or the whole swarm.">
+    <meta name="color-scheme" content="light">
+    <title>Combinatorial Swarmability</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#controls">Skip to controls</a>
+    <header class="site-header">
+      <div class="shell header-row">
+        <a class="site-name" href="https://mesmerprism.com/">Mesmer Prism</a>
+        <nav aria-label="Primary">
+          <a href="#demonstration">Demonstration</a>
+          <a href="#context">Context</a>
+          <a href="https://mesmerprism.com/projects/rusty-morphospace.html">Rusty Morphospace</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="intro shell" aria-labelledby="page-title">
+        <p class="plain-label">Accessible browser reconstruction</p>
+        <h1 id="page-title">Combinatorial Swarmability</h1>
+        <p class="lede">
+          Apply one speed action to one member, a chosen group, or the whole swarm.
+          Pointer, keyboard, and low-rate controls share the same semantic action;
+          target scope changes separately.
+        </p>
+        <p class="boundary-note">
+          This synthetic scene is a reconstruction, not an original authors’
+          implementation and not a universal interaction vocabulary. Its public
+          literature card remains placeholder copy pending a reviewed export.
+        </p>
+      </section>
+
+      <section id="demonstration" class="demo shell" aria-labelledby="demo-title">
+        <div class="section-heading">
+          <h2 id="demo-title">Addressing scope</h2>
+          <p>Start intentionally, select members, choose a scope, then adjust speed.</p>
+        </div>
+
+        <div class="demo-layout">
+          <div class="visual-column">
+            <div class="canvas-frame">
+              <canvas
+                id="swarm-canvas"
+                width="960"
+                height="640"
+                role="img"
+                aria-describedby="canvas-description"
+              ></canvas>
+              <p id="canvas-description" class="sr-only">
+                A paused two-dimensional synthetic swarm. Select members with the
+                controls below or point at a member on the canvas. Primary selection,
+                subgroup selection, and current targets also appear as text.
+              </p>
+              <div class="canvas-key" aria-hidden="true">
+                <span><i class="mark mark-primary"></i> Primary</span>
+                <span><i class="mark mark-group"></i> Subgroup</span>
+                <span><i class="mark mark-target"></i> Current target</span>
+              </div>
+            </div>
+
+            <section class="state-block" aria-labelledby="state-title">
+              <h3 id="state-title">Current state</h3>
+              <dl class="state-grid">
+                <div><dt>Motion</dt><dd id="state-motion">Paused</dd></div>
+                <div><dt>Scope</dt><dd id="state-scope">One member</dd></div>
+                <div><dt>Targets</dt><dd id="state-targets">Member 1</dd></div>
+                <div><dt>Subgroup</dt><dd id="state-subgroup">Members 1–6</dd></div>
+                <div><dt>Tick</dt><dd id="state-tick">0</dd></div>
+                <div><dt>Seed</dt><dd id="state-seed">2026</dd></div>
+                <div><dt>Average speed</dt><dd id="state-speed">0.360</dd></div>
+                <div><dt>Update mode</dt><dd id="state-motion-mode">Standard</dd></div>
+              </dl>
+              <p id="action-status" class="action-status" role="status" aria-live="polite">
+                Ready. Motion will not begin until Start is pressed.
+              </p>
+            </section>
+          </div>
+
+          <form id="controls" class="controls" aria-labelledby="controls-title">
+            <h3 id="controls-title">Controls</h3>
+
+            <fieldset>
+              <legend>Motion</legend>
+              <div class="button-row">
+                <button id="start-button" type="button">Start</button>
+                <button id="pause-button" type="button">Pause</button>
+                <button id="step-button" type="button">Step</button>
+                <button id="reset-button" type="button">Reset</button>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Target scope</legend>
+              <div class="scope-options">
+                <label><input type="radio" name="scope" value="member" checked> One member</label>
+                <label><input type="radio" name="scope" value="subgroup"> Subgroup</label>
+                <label><input type="radio" name="scope" value="swarm"> Whole swarm</label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Speed action</legend>
+              <p class="control-help">The same action is applied to the active scope.</p>
+              <div class="button-row action-buttons">
+                <button id="slower-button" type="button">Slower</button>
+                <button id="faster-button" type="button">Faster</button>
+              </div>
+              <p class="shortcut-note">Keyboard shortcuts: minus for Slower, plus for Faster.</p>
+            </fieldset>
+
+            <fieldset>
+              <legend>Primary and subgroup members</legend>
+              <p class="control-help">
+                Activate a member to make it primary. Use each checkbox to build the subgroup.
+              </p>
+              <div id="member-controls" class="member-controls"></div>
+              <button id="clear-subgroup-button" class="secondary-button" type="button">
+                Clear subgroup
+              </button>
+            </fieldset>
+
+            <fieldset>
+              <legend>Seeded restart</legend>
+              <label class="input-label" for="seed-input">Decimal seed</label>
+              <div class="seed-row">
+                <input id="seed-input" name="seed" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="20" value="2026">
+                <button id="restart-button" type="button">Restart seed</button>
+              </div>
+            </fieldset>
+          </form>
+        </div>
+      </section>
+
+      <section id="context" class="context shell" aria-labelledby="context-title">
+        <h2 id="context-title">What this slice proves</h2>
+        <div class="context-grid">
+          <article>
+            <h3>Independent dimensions</h3>
+            <p>
+              A pointer click, a focused member control, and a low-rate button all
+              become the same semantic requests. The current target scope—not the
+              input device—decides which members receive the action.
+            </p>
+          </article>
+          <article>
+            <h3>Reusable Rust boundary</h3>
+            <p>
+              A deterministic Rust core produces Rusty Matter particle payloads.
+              Canvas drawing and DOM accessibility remain browser adapters, so a
+              later headset route can reuse the core without importing browser code.
+            </p>
+          </article>
+          <article>
+            <h3>Evidence boundary</h3>
+            <p id="catalog-copy">
+              Synthetic placeholder: public paper and artifact links are withheld
+              until the first allowlisted research-to-public export is reviewed.
+            </p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-row">
+        <p>Deterministic public demo. No accounts, analytics, cookies, or behavioral logging.</p>
+        <p><a href="https://github.com/MesmerPrism/combinatorial-swarmability">Source repository</a></p>
+      </div>
+    </footer>
+
+    <noscript>
+      <p class="noscript-note">JavaScript and WebAssembly are required for the interactive reconstruction.</p>
+    </noscript>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
+

@@ -1,0 +1,21 @@
+{
+  "schema": "combinatorial.swarmability.public.catalog.v1",
+  "export_version": "0.1.0-synthetic",
+  "export_status": "synthetic_fixture",
+  "items": [
+    {
+      "public_id": "scope-reconstruction-001",
+      "title": "One action across three target scopes",
+      "summary": "A synthetic browser scene reconstructs the architectural distinction between input route and target scope.",
+      "semantic_action": "adjust_preferred_speed",
+      "target_scopes": ["member", "subgroup", "swarm"],
+      "evidence_class": "synthetic reconstruction",
+      "reconstruction": true,
+      "limitation": "This placeholder does not establish a universal, ability-diverse, or author-validated interaction vocabulary.",
+      "paper_url": null,
+      "artifact_url": null,
+      "checked_date": null
+    }
+  ]
+}
+
