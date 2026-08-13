@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install declared Rust toolchains
+        shell: bash
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
+          rustup toolchain install 1.80.0 --profile minimal
+      - name: Validate and build public artifact
+        shell: pwsh
+        run: ./scripts/Test-All.ps1
+      - name: Upload validation inventory
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: combinatorial-swarmability-artifact-inventory
+          path: output/
+          if-no-files-found: error
