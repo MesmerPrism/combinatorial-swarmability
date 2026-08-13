@@ -155,14 +155,15 @@
 
       <section id="demonstration" class="demo shell" aria-labelledby="demo-title">
         <div class="section-heading">
-          <h2 id="demo-title">Interactive reconstruction: scope, fields, dynamics, morphology, and history</h2>
+          <h2 id="demo-title">Interactive reconstruction: scope, fields, dynamics, morphology, leases, and history</h2>
           <p>
             Start intentionally, choose one member, the subgroup, or the whole swarm,
             then issue the same collective request through accessible browser controls.
             Place additive personal fields with explicit polarity and lifetime,
             expose bounded raw mode-transition rates, or translate Space, Time,
             Weight, and Flow into one inspectable raw vector. Split and merge
-            explicit member groups or rescale their formation target. Save, retrieve,
+            explicit member groups or rescale their formation target. Acquire, release,
+            expire, and explicitly hand off per-member simulated authority. Save, retrieve,
             reset, and replay operate across the same deterministic core.
           </p>
         </div>
@@ -215,6 +216,8 @@
                 <div><dt>Semantic qualities</dt><dd id="state-semantic-qualities">S 0.50 · T 0.50 · W 0.50 · F 0.50</dd></div>
                 <div><dt>Morphology groups</dt><dd id="state-group-count">1 of 8</dd></div>
                 <div><dt>Morphology revision</dt><dd id="state-morphology-revision">0</dd></div>
+                <div><dt>Active leases</dt><dd id="state-lease-count">0 of 8</dd></div>
+                <div><dt>Authority revision</dt><dd id="state-authority-revision">0</dd></div>
                 <div><dt>Neighbour links</dt><dd id="state-relations">0</dd></div>
                 <div><dt>Personal fields</dt><dd id="state-field-count">0 of 8</dd></div>
                 <div><dt>Synthetic contributors</dt><dd id="state-contributor-count">0 of 4</dd></div>
@@ -239,6 +242,9 @@
                   <div><dt>Group count</dt><dd id="metric-groups">1</dd></div>
                   <div><dt>Group sizes</dt><dd id="metric-group-sizes">24</dd></div>
                   <div><dt>Mean formation extent</dt><dd id="metric-formation-extent">0.000</dd></div>
+                  <div><dt>Active leases</dt><dd id="metric-leases">0</dd></div>
+                  <div><dt>Pending handoffs</dt><dd id="metric-pending-handoffs">0</dd></div>
+                  <div><dt>Shortest remaining lease</dt><dd id="metric-lease-remaining">None</dd></div>
                 </dl>
                 <p class="metric-note">
                   Cohesion and polarization are unitless 0–1 summaries; spacing uses
@@ -258,6 +264,24 @@
                 <ol id="morphology-group-roster" class="morphology-group-roster">
                   <li>Group 1: 24 members; formation scale 1.00.</li>
                 </ol>
+                <h4>App-local simulated authority</h4>
+                <p class="metric-note">
+                  Operators A–D are synthetic channels, not people, accounts, persistent identities, or live sessions.
+                </p>
+                <ol id="lease-roster" class="lease-roster">
+                  <li>No active leases.</li>
+                </ol>
+              </section>
+
+              <section class="action-trace lease-trace" aria-labelledby="lease-trace-title">
+                <h4 id="lease-trace-title">Latest lease authority transition</h4>
+                <dl class="trace-grid">
+                  <div><dt>Before</dt><dd id="lease-trace-before">No active leases; authority revision 0.</dd></div>
+                  <div><dt>Semantic action</dt><dd id="lease-trace-action">No lease action yet</dd></div>
+                  <div><dt>Policy</dt><dd id="lease-trace-policy">Exact holder, receiver consent, fixed-step expiry, and revision fencing are core-owned.</dd></div>
+                  <div><dt>Receipt or expiry</dt><dd id="lease-trace-receipt">—</dd></div>
+                  <div><dt>After</dt><dd id="lease-trace-after">No active leases; authority revision 0.</dd></div>
+                </dl>
               </section>
 
               <section class="action-trace morphology-trace" aria-labelledby="morphology-trace-title">
@@ -351,6 +375,59 @@
               </div>
               <p class="control-help">
                 Scale 0.50–2.00, default 1.00. It changes a separate radial formation target and never rewrites dynamics parameters.
+              </p>
+            </fieldset>
+
+            <fieldset id="lease-controls">
+              <legend>Lease, expiry, release, and handoff</legend>
+              <p class="control-help">
+                This deterministic app-local reconstruction uses four synthetic operator channels and per-member fixed-step leases.
+                It has no accounts, networking, wall clock, hidden arbitration, or live multi-user/session authority.
+              </p>
+              <p class="control-help evidence-boundary">
+                It does not reproduce the original mixed-reality interface or establish equitable authority, mixed-ability access,
+                or endogenous swarm governance. Handoff requires an exact holder offer and explicit named-receiver acceptance.
+              </p>
+              <div class="lease-grid">
+                <label for="lease-operator">Acting synthetic operator</label>
+                <select id="lease-operator" name="lease-operator">
+                  <option value="0">Operator A</option>
+                  <option value="1">Operator B</option>
+                  <option value="2">Operator C</option>
+                  <option value="3">Operator D</option>
+                </select>
+                <label for="lease-member">Canonical member</label>
+                <select id="lease-member" name="lease-member"></select>
+                <label for="lease-receiver">Explicit handoff receiver</label>
+                <select id="lease-receiver" name="lease-receiver">
+                  <option value="1">Operator B</option>
+                  <option value="0">Operator A</option>
+                  <option value="2">Operator C</option>
+                  <option value="3">Operator D</option>
+                </select>
+              </div>
+              <div class="dynamics-control">
+                <label for="lease-lifetime">Lease lifetime in fixed steps <output id="lease-lifetime-value" for="lease-lifetime">120</output></label>
+                <input id="lease-lifetime" name="lease-lifetime" type="range" min="1" max="600" step="1" value="120">
+              </div>
+              <div class="button-row lease-buttons">
+                <button id="request-lease-button" type="button">Request lease</button>
+                <button id="release-lease-button" type="button" disabled>Release as holder</button>
+                <button id="offer-handoff-button" type="button" disabled>Offer handoff</button>
+                <button id="accept-handoff-button" type="button" disabled>Receiver accepts</button>
+                <button id="decline-handoff-button" type="button" disabled>Receiver declines</button>
+              </div>
+              <div class="lease-use-row">
+                <label for="leased-behavior">Holder-only member behavior</label>
+                <select id="leased-behavior" name="leased-behavior">
+                  <option value="flock">Flock</option>
+                  <option value="cohere">Cohere</option>
+                  <option value="disperse">Disperse</option>
+                </select>
+                <button id="use-lease-button" type="button" disabled>Apply through lease</button>
+              </div>
+              <p id="lease-command-reason" class="control-help" role="status">
+                Member 1 is unheld; Operator A may request it.
               </p>
             </fieldset>
 

@@ -1,4 +1,4 @@
-import init, { DemoEngine } from "./pkg/demo_wasm.js?v=morphology-v1";
+import init, { DemoEngine } from "./pkg/demo_wasm.js?v=leases-v1";
 
 const DEFAULT_SEED = "2026";
 const SPEED_DELTA = 0.10;
@@ -7,7 +7,9 @@ const MAX_CHECKPOINTS = 5;
 const MAX_SESSION_HISTORY = 50;
 const MAX_PERSONAL_FIELDS = 8;
 const MAX_MORPHOLOGY_GROUPS = 8;
+const MAX_ACTIVE_LEASES = 8;
 const CONTRIBUTOR_LABELS = ["A", "B", "C", "D"];
+const OPERATOR_LABELS = ["A", "B", "C", "D"];
 const CONTRIBUTOR_COLORS = ["#3f6f85", "#a85d45", "#657a46", "#755b9b"];
 const GROUP_COLORS = ["#315d6c", "#9b563f", "#5d753c", "#705296", "#936d22", "#276d65", "#8a4968", "#57698f"];
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -39,6 +41,11 @@ const mergeFirstGroup = document.querySelector("#merge-first-group");
 const mergeSecondGroup = document.querySelector("#merge-second-group");
 const scaleGroup = document.querySelector("#scale-group");
 const formationScale = document.querySelector("#formation-scale");
+const leaseOperator = document.querySelector("#lease-operator");
+const leaseMember = document.querySelector("#lease-member");
+const leaseReceiver = document.querySelector("#lease-receiver");
+const leaseLifetime = document.querySelector("#lease-lifetime");
+const leasedBehavior = document.querySelector("#leased-behavior");
 const atlasFilters = document.querySelector("#atlas-filters");
 const atlasList = document.querySelector("#atlas-list");
 const atlasCount = document.querySelector("#atlas-count");
@@ -57,7 +64,7 @@ let reducedTimestamp = 0;
 let rowWidth = 0;
 
 await init({
-  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=morphology-v1", import.meta.url),
+  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=leases-v1", import.meta.url),
 });
 engine = new DemoEngine(DEFAULT_SEED);
 rowWidth = DemoEngine.frame_row_width();
@@ -182,6 +189,16 @@ function bindControls() {
   mergeSecondGroup.addEventListener("change", updateMorphologyControls);
   scaleGroup.addEventListener("change", syncFormationScaleEditor);
   formationScale.addEventListener("input", updateFormationScaleOutput);
+  document.querySelector("#request-lease-button").addEventListener("click", requestSelectedLease);
+  document.querySelector("#release-lease-button").addEventListener("click", releaseSelectedLease);
+  document.querySelector("#offer-handoff-button").addEventListener("click", offerSelectedHandoff);
+  document.querySelector("#accept-handoff-button").addEventListener("click", (event) => resolveSelectedHandoff(event, "accept"));
+  document.querySelector("#decline-handoff-button").addEventListener("click", (event) => resolveSelectedHandoff(event, "decline"));
+  document.querySelector("#use-lease-button").addEventListener("click", useSelectedLease);
+  [leaseOperator, leaseMember, leaseReceiver].forEach((select) => {
+    select.addEventListener("change", updateLeaseControls);
+  });
+  leaseLifetime.addEventListener("input", updateLeaseLifetimeOutput);
   checkpointSelect.addEventListener("change", () => {
     const checkpoint = savedCheckpoints.get(checkpointSelect.value);
     if (checkpoint) {
@@ -434,6 +451,159 @@ function syncFormationScaleEditor() {
 
 function updateFormationScaleOutput() {
   document.querySelector("#formation-scale-value").textContent = Number(formationScale.value).toFixed(2);
+}
+
+function requestSelectedLease(event) {
+  const memberId = Number(leaseMember.value);
+  const operatorId = Number(leaseOperator.value);
+  const lifetimeSteps = Number(leaseLifetime.value);
+  dispatch(
+    {
+      type: "request_lease",
+      member_id: memberId,
+      operator_id: operatorId,
+      lifetime_steps: lifetimeSteps,
+      expected_authority_revision: state.authority_revision,
+    },
+    interactionTrace(
+      event,
+      `lease.request(member-${memberId + 1}, operator-${OPERATOR_LABELS[operatorId]}, ${lifetimeSteps}-steps)`,
+      "Acquire only if the canonical member is unheld and the active-lease cap has room; fixed-step expiry only"
+    )
+  );
+}
+
+function releaseSelectedLease(event) {
+  const memberId = Number(leaseMember.value);
+  const operatorId = Number(leaseOperator.value);
+  dispatch(
+    {
+      type: "release_lease",
+      member_id: memberId,
+      operator_id: operatorId,
+      expected_authority_revision: state.authority_revision,
+    },
+    interactionTrace(
+      event,
+      `lease.release(member-${memberId + 1}, operator-${OPERATOR_LABELS[operatorId]})`,
+      "Only the exact current holder may release; a pending offer grants no authority"
+    )
+  );
+}
+
+function offerSelectedHandoff(event) {
+  const memberId = Number(leaseMember.value);
+  const holderId = Number(leaseOperator.value);
+  const receiverId = Number(leaseReceiver.value);
+  dispatch(
+    {
+      type: "offer_lease_handoff",
+      member_id: memberId,
+      holder_operator_id: holderId,
+      receiver_operator_id: receiverId,
+      expected_authority_revision: state.authority_revision,
+    },
+    interactionTrace(
+      event,
+      `lease.handoff-offer(member-${memberId + 1}, ${OPERATOR_LABELS[holderId]}→${OPERATOR_LABELS[receiverId]})`,
+      "Exact holder consent creates one pending named-receiver offer; holder and original expiry remain unchanged"
+    )
+  );
+}
+
+function resolveSelectedHandoff(event, decision) {
+  const memberId = Number(leaseMember.value);
+  const receiverId = Number(leaseReceiver.value);
+  dispatch(
+    {
+      type: "resolve_lease_handoff",
+      member_id: memberId,
+      receiver_operator_id: receiverId,
+      decision,
+      expected_authority_revision: state.authority_revision,
+    },
+    interactionTrace(
+      event,
+      `lease.handoff-${decision}(member-${memberId + 1}, receiver-${OPERATOR_LABELS[receiverId]})`,
+      decision === "accept"
+        ? "Only the exact named receiver may explicitly accept; the original fixed-step expiry remains"
+        : "Only the exact named receiver may decline; current holder and original expiry remain"
+    )
+  );
+}
+
+function useSelectedLease(event) {
+  const memberId = Number(leaseMember.value);
+  const operatorId = Number(leaseOperator.value);
+  const behavior = leasedBehavior.value;
+  dispatch(
+    {
+      type: "set_leased_behavior",
+      member_id: memberId,
+      operator_id: operatorId,
+      behavior,
+      expected_authority_revision: state.authority_revision,
+    },
+    interactionTrace(
+      event,
+      `lease.use(member-${memberId + 1}, operator-${OPERATOR_LABELS[operatorId]}, ${behavior})`,
+      "Exact current holder may assign one behavior to this canonical member; target scope remains independent"
+    )
+  );
+}
+
+function selectedLease() {
+  const memberId = Number(leaseMember.value);
+  return state.leases.find((lease) => lease.member_id === memberId);
+}
+
+function updateLeaseLifetimeOutput() {
+  document.querySelector("#lease-lifetime-value").textContent = leaseLifetime.value;
+}
+
+function updateLeaseControls() {
+  const selectedMember = leaseMember.value;
+  if (leaseMember.options.length === 0) {
+    const fragment = document.createDocumentFragment();
+    state.members.forEach((member) => {
+      const option = document.createElement("option");
+      option.value = String(member.member_id);
+      option.textContent = `Member ${member.member_id + 1}`;
+      fragment.append(option);
+    });
+    leaseMember.append(fragment);
+  }
+  if (selectedMember && state.members.some((member) => String(member.member_id) === selectedMember)) {
+    leaseMember.value = selectedMember;
+  }
+  const lease = selectedLease();
+  const operatorId = Number(leaseOperator.value);
+  const receiverId = Number(leaseReceiver.value);
+  const isHolder = lease?.holder_operator_id === operatorId;
+  const isReceiver = lease?.pending_handoff_to === receiverId;
+  document.querySelector("#request-lease-button").disabled = Boolean(lease) || state.leases.length >= MAX_ACTIVE_LEASES;
+  document.querySelector("#release-lease-button").disabled = !isHolder;
+  document.querySelector("#offer-handoff-button").disabled =
+    !isHolder || receiverId === operatorId || lease.pending_handoff_to !== null;
+  document.querySelector("#accept-handoff-button").disabled = !isReceiver;
+  document.querySelector("#decline-handoff-button").disabled = !isReceiver;
+  document.querySelector("#use-lease-button").disabled = !isHolder;
+
+  const memberLabel = `Member ${Number(leaseMember.value) + 1}`;
+  const operatorLabel = `Operator ${OPERATOR_LABELS[operatorId]}`;
+  let reason = `${memberLabel} is unheld; ${operatorLabel} may request it.`;
+  if (lease) {
+    reason = `${memberLabel} is held by Operator ${OPERATOR_LABELS[lease.holder_operator_id]} for ${lease.remaining_steps} more fixed steps.`;
+    if (lease.pending_handoff_to !== null) {
+      reason += ` Operator ${OPERATOR_LABELS[lease.pending_handoff_to]} must explicitly accept or decline the pending offer.`;
+    } else if (!isHolder) {
+      reason += ` ${operatorLabel} cannot release, offer, or use it.`;
+    }
+  } else if (state.leases.length >= MAX_ACTIVE_LEASES) {
+    reason = `The eight-lease cap is full; release or await expiry before requesting ${memberLabel}.`;
+  }
+  document.querySelector("#lease-command-reason").textContent = reason;
+  updateLeaseLifetimeOutput();
 }
 
 function adjustSpeed(delta, trace) {
@@ -777,12 +947,17 @@ function restartSeed(event) {
 
 function dispatch(action, trace = {}) {
   const morphologyBefore = isMorphologyAction(action) ? morphologySummary(state) : "";
+  const authorityBefore = authoritySummary(state);
+  const authorityRevisionBefore = state.authority_revision;
   try {
     const receipt = JSON.parse(engine.dispatch_json(JSON.stringify(action)));
     refreshAll();
     updateActionTrace(trace, action, receipt);
     if (morphologyBefore) {
       updateMorphologyTrace(morphologyBefore, trace, action, receipt);
+    }
+    if (isLeaseAction(action) || state.authority_revision !== authorityRevisionBefore) {
+      updateLeaseTrace(authorityBefore, trace, action, receipt);
     }
     announce(receipt.summary, !receipt.accepted);
     syncAnimation();
@@ -796,7 +971,7 @@ function dispatch(action, trace = {}) {
 function updateActionTrace(trace, action, receipt) {
   const policy = trace.policy || `${scopeLabel(state.scope)} → ${memberList(state.target_members)}`;
   const accepted = receipt.accepted ? "accepted" : "rejected";
-  const revision = `state ${receipt.state_revision}, selection ${receipt.selection_revision}, morphology ${receipt.morphology_revision}`;
+  const revision = `state ${receipt.state_revision}, selection ${receipt.selection_revision}, morphology ${receipt.morphology_revision}, authority ${receipt.authority_revision}`;
   renderActionTrace(
     { ...trace, policy },
     semanticActionLabel(action),
@@ -806,6 +981,16 @@ function updateActionTrace(trace, action, receipt) {
 
 function isMorphologyAction(action) {
   return ["split_group", "merge_groups", "set_formation_scale"].includes(action.type);
+}
+
+function isLeaseAction(action) {
+  return [
+    "request_lease",
+    "release_lease",
+    "offer_lease_handoff",
+    "resolve_lease_handoff",
+    "set_leased_behavior",
+  ].includes(action.type);
 }
 
 function morphologySummary(snapshot) {
@@ -823,6 +1008,34 @@ function updateMorphologyTrace(before, trace, action, receipt) {
   document.querySelector("#morphology-trace-receipt").textContent =
     `${receipt.code} · ${accepted} · morphology ${receipt.morphology_revision}`;
   document.querySelector("#morphology-trace-after").textContent = morphologySummary(state);
+}
+
+function authoritySummary(snapshot) {
+  if (snapshot.leases.length === 0) {
+    return `No active leases; authority revision ${snapshot.authority_revision}.`;
+  }
+  const leases = snapshot.leases.map((lease) => {
+    const handoff = lease.pending_handoff_to === null
+      ? ""
+      : `, offered to ${OPERATOR_LABELS[lease.pending_handoff_to]}`;
+    return `Member ${lease.member_id + 1}: Operator ${OPERATOR_LABELS[lease.holder_operator_id]}, ${lease.remaining_steps} steps${handoff}`;
+  }).join("; ");
+  return `${snapshot.leases.length} active leases · ${leases} · authority revision ${snapshot.authority_revision}.`;
+}
+
+function updateLeaseTrace(before, trace, action, receipt) {
+  const expired = !isLeaseAction(action);
+  const accepted = receipt.accepted ? "accepted" : "rejected";
+  const actionLabel = isLeaseAction(action) ? semanticActionLabel(action) : "fixed_step_lease_expiry";
+  document.querySelector("#lease-trace-before").textContent = before;
+  document.querySelector("#lease-trace-action").textContent = actionLabel;
+  document.querySelector("#lease-trace-policy").textContent = isLeaseAction(action)
+    ? trace.policy
+    : "Deterministic expiry at the exclusive fixed-step boundary; no wall clock or hidden arbitration";
+  document.querySelector("#lease-trace-receipt").textContent = isLeaseAction(action)
+    ? `${receipt.code} · ${accepted} · authority ${receipt.authority_revision}`
+    : `${expired ? "fixed_step_expiry" : receipt.code} · authority ${receipt.authority_revision}`;
+  document.querySelector("#lease-trace-after").textContent = authoritySummary(state);
 }
 
 function updateInfrastructureTrace(trace, action, code, accepted, detail) {
@@ -876,7 +1089,12 @@ function renderSessionHistory() {
 
 function semanticActionLabel(action) {
   const parameters = Object.entries(action)
-    .filter(([key]) => !["type", "expected_selection_revision", "expected_morphology_revision"].includes(key))
+    .filter(([key]) => ![
+      "type",
+      "expected_selection_revision",
+      "expected_morphology_revision",
+      "expected_authority_revision",
+    ].includes(key))
     .map(([key, value]) => `${key}=${parameterLabel(value)}`);
   return parameters.length > 0 ? `${action.type}(${parameters.join(", ")})` : action.type;
 }
@@ -917,21 +1135,38 @@ function animate(timestamp) {
 
   if (reducedMotion.matches) {
     if (timestamp - reducedTimestamp >= 250) {
+      const authorityBefore = state;
       engine.advance(16);
       reducedTimestamp = timestamp;
       state = JSON.parse(engine.state_json());
+      traceAnimatedLeaseExpiry(authorityBefore);
       rows = engine.frame_rows();
       updateDomState(false);
       draw();
     }
   } else {
+    const authorityBefore = state;
     engine.advance(elapsed);
     state = JSON.parse(engine.state_json());
+    traceAnimatedLeaseExpiry(authorityBefore);
     rows = engine.frame_rows();
     updateDomState(false);
     draw();
   }
   animationHandle = requestAnimationFrame(animate);
+}
+
+function traceAnimatedLeaseExpiry(before) {
+  if (before.authority_revision === state.authority_revision) {
+    return;
+  }
+  document.querySelector("#lease-trace-before").textContent = authoritySummary(before);
+  document.querySelector("#lease-trace-action").textContent = "fixed_step_lease_expiry";
+  document.querySelector("#lease-trace-policy").textContent =
+    "Deterministic expiry at the exclusive fixed-step boundary; no wall clock or hidden arbitration";
+  document.querySelector("#lease-trace-receipt").textContent =
+    `fixed_step_expiry · authority ${state.authority_revision}`;
+  document.querySelector("#lease-trace-after").textContent = authoritySummary(state);
 }
 
 function updateDomState(updateControls = true) {
@@ -952,6 +1187,8 @@ function updateDomState(updateControls = true) {
     `S ${state.semantic_qualities.space.toFixed(2)} · T ${state.semantic_qualities.time.toFixed(2)} · W ${state.semantic_qualities.weight.toFixed(2)} · F ${state.semantic_qualities.flow.toFixed(2)}`;
   document.querySelector("#state-group-count").textContent = `${state.groups.length} of ${MAX_MORPHOLOGY_GROUPS}`;
   document.querySelector("#state-morphology-revision").textContent = String(state.morphology_revision);
+  document.querySelector("#state-lease-count").textContent = `${state.leases.length} of ${MAX_ACTIVE_LEASES}`;
+  document.querySelector("#state-authority-revision").textContent = String(state.authority_revision);
   document.querySelector("#state-relations").textContent = String(relationTotal);
   document.querySelector("#state-field-count").textContent = `${state.fields.length} of ${MAX_PERSONAL_FIELDS}`;
   document.querySelector("#state-contributor-count").textContent = `${state.active_contributor_count} of ${CONTRIBUTOR_LABELS.length}`;
@@ -978,16 +1215,24 @@ function updateDomState(updateControls = true) {
     .join(" / ");
   document.querySelector("#metric-formation-extent").textContent =
     (state.groups.reduce((total, group) => total + group.formation_extent, 0) / state.groups.length).toFixed(3);
+  document.querySelector("#metric-leases").textContent = String(state.leases.length);
+  document.querySelector("#metric-pending-handoffs").textContent = String(
+    state.leases.filter((lease) => lease.pending_handoff_to !== null).length
+  );
+  document.querySelector("#metric-lease-remaining").textContent = state.leases.length === 0
+    ? "None"
+    : `${Math.min(...state.leases.map((lease) => lease.remaining_steps))} fixed steps`;
   document.querySelector("#step-button").disabled = state.running;
   document.querySelector("#start-button").disabled = state.running;
   document.querySelector("#pause-button").disabled = !state.running;
   renderResolvedDynamics();
   renderMorphologyRoster();
+  renderLeaseRoster();
   updateHistoryControls();
   updateFieldControls();
   canvas.setAttribute(
     "aria-label",
-    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. ${dynamicsModeLabel()} resolve alignment ${state.resolved_dynamics.rates.alignment.toFixed(2)}, cohesion ${state.resolved_dynamics.rates.cohesion.toFixed(2)}, separation ${state.resolved_dynamics.rates.separation.toFixed(2)}, speed scale ${state.resolved_dynamics.speed_scale.toFixed(2)}, damping ${state.resolved_dynamics.damping.toFixed(2)}, and jitter ${state.resolved_dynamics.jitter.toFixed(2)}. ${state.fields.length} additive personal fields. ${morphologySummary(state)}.`
+    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. ${dynamicsModeLabel()} resolve alignment ${state.resolved_dynamics.rates.alignment.toFixed(2)}, cohesion ${state.resolved_dynamics.rates.cohesion.toFixed(2)}, separation ${state.resolved_dynamics.rates.separation.toFixed(2)}, speed scale ${state.resolved_dynamics.speed_scale.toFixed(2)}, damping ${state.resolved_dynamics.damping.toFixed(2)}, and jitter ${state.resolved_dynamics.jitter.toFixed(2)}. ${state.fields.length} additive personal fields. ${morphologySummary(state)}. ${authoritySummary(state)}`
   );
   updateMotionMode();
 
@@ -1001,6 +1246,7 @@ function updateDomState(updateControls = true) {
     updateSemanticControls();
     updateMorphologyControls();
   }
+  updateLeaseControls();
 }
 
 function renderMorphologyRoster() {
@@ -1011,6 +1257,26 @@ function renderMorphologyRoster() {
     fragment.append(item);
   });
   document.querySelector("#morphology-group-roster").replaceChildren(fragment);
+}
+
+function renderLeaseRoster() {
+  const list = document.querySelector("#lease-roster");
+  if (state.leases.length === 0) {
+    const empty = document.createElement("li");
+    empty.textContent = "No active leases.";
+    list.replaceChildren(empty);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  state.leases.forEach((lease) => {
+    const item = document.createElement("li");
+    const handoff = lease.pending_handoff_to === null
+      ? "no pending handoff"
+      : `handoff offered to Operator ${OPERATOR_LABELS[lease.pending_handoff_to]}`;
+    item.textContent = `Member ${lease.member_id + 1}: holder Operator ${OPERATOR_LABELS[lease.holder_operator_id]}, acquired tick ${lease.acquired_at_tick}, expires before tick ${lease.expires_at_tick}, ${lease.remaining_steps} fixed steps remain, ${handoff}.`;
+    fragment.append(item);
+  });
+  list.replaceChildren(fragment);
 }
 
 function updateFieldControls() {
@@ -1141,7 +1407,10 @@ function updateMemberControls() {
     const memberId = Number(button.dataset.memberId);
     const member = members.get(memberId);
     button.setAttribute("aria-pressed", String(state.primary_member === memberId));
-    button.setAttribute("aria-label", `Select member ${memberId + 1} as primary; morphology Group ${(member?.group_id ?? 0) + 1}`);
+    const leaseLabel = (member?.lease_holder_operator_id ?? null) === null
+      ? "unleased"
+      : `leased by synthetic Operator ${OPERATOR_LABELS[member?.lease_holder_operator_id]}`;
+    button.setAttribute("aria-label", `Select member ${memberId + 1} as primary; morphology Group ${(member?.group_id ?? 0) + 1}; ${leaseLabel}`);
   });
   memberControls.querySelectorAll("input[data-group-member-id]").forEach((input) => {
     input.checked = subgroup.has(Number(input.dataset.groupMemberId));

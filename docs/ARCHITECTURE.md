@@ -43,6 +43,13 @@ retains the lower participating ID and its scale. Formation scale is a separate
 resolved dynamics vector. Morphology groups are independent from the existing
 target subgroup, fields, contributor provenance, behavior assignment, and
 dynamics authority.
+Lease authority is a separate app-local state machine over canonical member
+IDs and four fixed synthetic operator channels. At most eight leases can be
+active. Request acquires only an unheld member for 1–600 fixed steps, exact
+holder release is explicit, and fixed-step expiry is deterministic. Handoff is
+a two-action offer plus named-receiver accept/decline; acceptance changes only
+the holder and preserves the original expiry. One holder-gated behavior action
+makes authority consequences visible without reusing target-scope policy.
 
 ## Non-scope
 
@@ -80,6 +87,7 @@ field combination policy -- bounded additive superposition / expiry
 raw dynamics policy -- bounded global rates / deterministic weighted selection
 semantic dynamics policy -- bounded qualities / inspectable app-owned interpolation
 morphology policy -- canonical group IDs / conservation / formation scale
+lease policy -- exact holder / named receiver consent / fixed-step expiry
         |
         v
 fixed-step deterministic flock state
@@ -144,6 +152,17 @@ out-of-range requests are rejected without changing state. Split and merge do
 not clear unrelated mechanisms, and all three actions use ordinary snapshot,
 checkpoint, reset, and replay paths.
 
+Every lease mutation and holder-gated use carries a monotonically increasing
+authority revision. Stale, unknown-member/operator, duplicate acquisition,
+non-holder release/use/offer, self-handoff, mismatched receiver, excessive
+lifetime, over-cap, expired-lease use, and replayed mutation fail closed.
+Expiry increments the same authority revision exactly when the fixed tick
+reaches the exclusive expiry boundary. Leases remain attached to canonical
+members through group split/merge/rescale; those actions neither transfer nor
+clear authority. Reset clears leases and increments the revision. Snapshot and
+replay preserve acquisition tick, exclusive expiry, remaining lifetime,
+pending consent, holder, and revision exactly.
+
 The Wasm adapter exposes one fixed-size row per member:
 
 ```text
@@ -171,7 +190,10 @@ values, active control authority, all six resolved quantities, and the
 source-supported/app-owned coupling distinction are also ordinary DOM text,
 while canonical group rosters, member counts, formation scales, morphology
 revision, before/after receipts, and observed formation extent expose morphology
-without relying on the canvas. Cohesion,
+without relying on the canvas. Active lease holder, acquisition/expiry tick,
+remaining lifetime, pending receiver consent, authority revision, disabled-
+command reasons, and before/after receipts expose simulated authority as text.
+Cohesion,
 polarization, spacing, speed, and relation counts expose consequences. Replay
 event/step totals, checkpoint count, and the
 bounded session operation log also have semantic DOM projections. Animation
@@ -195,6 +217,9 @@ canonical morphology identity and conservation, deterministic partition and
 merge rules, group/scale bounds, stale and damaged operation rejection,
 formation-scale effects, and coexistence with scope, fields, raw/semantic
 dynamics, checkpoints, reset, and replay,
+lease state-machine/damage matrices, fixed-step expiry boundaries, holder-only
+use, named-receiver consent, stale/replay resistance, caps, exact checkpoint/
+replay/reset, morphology lifecycle interactions, and cross-mechanism preservation,
 Matter payload conversion, exact Git dependency pins, frozen builds, the Wasm
 bundle, public-boundary scans, and browser interaction/accessibility checks.
 
@@ -230,9 +255,12 @@ actions and payloads, not DOM or Canvas code.
 | Visual clusters become hidden or inconsistent group authority | Canonical bounded groups and complete member rosters live in the reducer and semantic DOM |
 | Split or merge silently destroys unrelated state | Lifecycle tests preserve scope selection, fields, provenance, behaviors, and dynamics authority |
 | Rescale becomes an undocumented dynamics rewrite | Formation scale is an explicit per-group target with independent bounds and a neutral default |
+| Synthetic operators are mistaken for people or sessions | Four fixed labels have no account, storage, networking, or persistent identity contract |
+| Handoff silently reallocates authority | Holder offer and exact named-receiver accept/decline are separate revision-fenced actions |
+| Wall time or animation rate changes ownership | Lease lifetime and expiry use only deterministic fixed steps recorded in replay |
 
 ## Next slice
 
-Bind the reviewed split/merge/rescale reconstruction to its public catalogue
-entry, then continue with lease, expiry, and handoff. Optics integration,
+Bind the reviewed lease/expiry/handoff reconstruction to its public catalogue
+entry, then continue with comparison mode. Optics integration,
 multi-user authority, and Quest adaptation remain separate later decisions.

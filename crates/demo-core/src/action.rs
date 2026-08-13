@@ -32,6 +32,16 @@ pub enum GroupPartitionRule {
     AlternatingMemberId,
 }
 
+/// Explicit receiver response to a pending app-local lease handoff.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HandoffDecision {
+    /// Receiver consents and becomes holder for the lease's remaining lifetime.
+    Accept,
+    /// Receiver declines; the current holder and original expiry remain in place.
+    Decline,
+}
+
 /// App-owned rates for entering the three existing collective steering modes.
 ///
 /// These values are a bounded technical reconstruction of endogenous controller
@@ -228,6 +238,59 @@ pub enum SemanticAction {
         /// Morphology revision against which the operation was prepared.
         expected_morphology_revision: u64,
     },
+    /// Acquire one unheld member for a bounded fixed-step lifetime.
+    RequestLease {
+        /// Canonical member identifier.
+        member_id: u16,
+        /// App-local synthetic operator channel requesting authority.
+        operator_id: u8,
+        /// Positive bounded lifetime measured only in deterministic fixed steps.
+        lifetime_steps: u32,
+        /// Authority revision against which the request was prepared.
+        expected_authority_revision: u64,
+    },
+    /// Release one lease explicitly; only its exact current holder may release it.
+    ReleaseLease {
+        /// Canonical member identifier.
+        member_id: u16,
+        /// Exact current synthetic holder.
+        operator_id: u8,
+        /// Authority revision against which the release was prepared.
+        expected_authority_revision: u64,
+    },
+    /// Offer a held lease to one explicit distinct receiver.
+    OfferLeaseHandoff {
+        /// Canonical member identifier.
+        member_id: u16,
+        /// Exact current synthetic holder consenting to the offer.
+        holder_operator_id: u8,
+        /// Explicit distinct synthetic receiver.
+        receiver_operator_id: u8,
+        /// Authority revision against which the offer was prepared.
+        expected_authority_revision: u64,
+    },
+    /// Accept or decline one exact pending lease handoff as its named receiver.
+    ResolveLeaseHandoff {
+        /// Canonical member identifier.
+        member_id: u16,
+        /// Exact pending synthetic receiver.
+        receiver_operator_id: u8,
+        /// Explicit receiver consent or refusal.
+        decision: HandoffDecision,
+        /// Authority revision against which the response was prepared.
+        expected_authority_revision: u64,
+    },
+    /// Use a held lease to assign one behavior to its exact canonical member.
+    SetLeasedBehavior {
+        /// Canonical member identifier.
+        member_id: u16,
+        /// Exact current synthetic holder.
+        operator_id: u8,
+        /// Collective steering rule to assign to this member only.
+        behavior: CollectiveBehavior,
+        /// Authority revision against which the use was prepared.
+        expected_authority_revision: u64,
+    },
     /// Place one bounded field with synthetic contributor provenance.
     PlaceField {
         /// Stable field identifier within the scene.
@@ -338,6 +401,35 @@ enum SemanticActionWire {
         scale: f32,
         expected_morphology_revision: u64,
     },
+    RequestLease {
+        member_id: u16,
+        operator_id: u8,
+        lifetime_steps: u32,
+        expected_authority_revision: u64,
+    },
+    ReleaseLease {
+        member_id: u16,
+        operator_id: u8,
+        expected_authority_revision: u64,
+    },
+    OfferLeaseHandoff {
+        member_id: u16,
+        holder_operator_id: u8,
+        receiver_operator_id: u8,
+        expected_authority_revision: u64,
+    },
+    ResolveLeaseHandoff {
+        member_id: u16,
+        receiver_operator_id: u8,
+        decision: HandoffDecision,
+        expected_authority_revision: u64,
+    },
+    SetLeasedBehavior {
+        member_id: u16,
+        operator_id: u8,
+        behavior: CollectiveBehavior,
+        expected_authority_revision: u64,
+    },
     PlaceField {
         field_id: u16,
         contributor_id: u8,
@@ -368,6 +460,7 @@ enum SemanticActionWire {
 }
 
 impl<'de> Deserialize<'de> for SemanticAction {
+    #[allow(clippy::too_many_lines)] // Strict wire mapping is intentionally explicit and centralized.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -430,6 +523,59 @@ impl<'de> Deserialize<'de> for SemanticAction {
                 group_id,
                 scale,
                 expected_morphology_revision,
+            },
+            SemanticActionWire::RequestLease {
+                member_id,
+                operator_id,
+                lifetime_steps,
+                expected_authority_revision,
+            } => Self::RequestLease {
+                member_id,
+                operator_id,
+                lifetime_steps,
+                expected_authority_revision,
+            },
+            SemanticActionWire::ReleaseLease {
+                member_id,
+                operator_id,
+                expected_authority_revision,
+            } => Self::ReleaseLease {
+                member_id,
+                operator_id,
+                expected_authority_revision,
+            },
+            SemanticActionWire::OfferLeaseHandoff {
+                member_id,
+                holder_operator_id,
+                receiver_operator_id,
+                expected_authority_revision,
+            } => Self::OfferLeaseHandoff {
+                member_id,
+                holder_operator_id,
+                receiver_operator_id,
+                expected_authority_revision,
+            },
+            SemanticActionWire::ResolveLeaseHandoff {
+                member_id,
+                receiver_operator_id,
+                decision,
+                expected_authority_revision,
+            } => Self::ResolveLeaseHandoff {
+                member_id,
+                receiver_operator_id,
+                decision,
+                expected_authority_revision,
+            },
+            SemanticActionWire::SetLeasedBehavior {
+                member_id,
+                operator_id,
+                behavior,
+                expected_authority_revision,
+            } => Self::SetLeasedBehavior {
+                member_id,
+                operator_id,
+                behavior,
+                expected_authority_revision,
             },
             SemanticActionWire::PlaceField {
                 field_id,
@@ -496,6 +642,18 @@ pub enum ActionCode {
     GroupsMerged,
     /// One explicit formation-scale target changed.
     FormationScaleSet,
+    /// One previously unheld canonical member was leased.
+    LeaseAcquired,
+    /// One current holder explicitly released its lease.
+    LeaseReleased,
+    /// One current holder offered its lease to an explicit receiver.
+    LeaseHandoffOffered,
+    /// The explicit receiver accepted and became the current holder.
+    LeaseHandoffAccepted,
+    /// The explicit receiver declined and the current holder remained unchanged.
+    LeaseHandoffDeclined,
+    /// The current holder used its lease to change one member's behavior.
+    LeasedBehaviorSet,
     /// A bounded personal field was placed.
     FieldPlaced,
     /// An existing personal field was moved.
@@ -540,6 +698,26 @@ pub enum ActionCode {
     GroupLimitReached,
     /// A formation scale was non-finite or outside its explicit range.
     InvalidFormationScale,
+    /// The operation was prepared against an older app-local authority state.
+    StaleAuthority,
+    /// The synthetic operator channel is outside the app-local bound.
+    InvalidOperator,
+    /// The requested fixed-step lease lifetime is zero, excessive, or overflowing.
+    InvalidLeaseLifetime,
+    /// The bounded scene already contains its maximum number of active leases.
+    LeaseLimitReached,
+    /// The requested member already has an active lease.
+    LeaseAlreadyHeld,
+    /// The requested member has no current unexpired lease.
+    MissingLease,
+    /// The supplied synthetic operator is not the exact current holder.
+    NotLeaseHolder,
+    /// A handoff receiver must be valid and distinct from the current holder.
+    InvalidHandoff,
+    /// The lease already has a pending handoff offer.
+    HandoffAlreadyPending,
+    /// No exact pending handoff exists for this member and receiver.
+    MissingHandoff,
     /// The requested field identifier is outside the bounded scene contract.
     InvalidFieldId,
     /// A field already uses the requested identifier.
@@ -575,6 +753,8 @@ pub struct ActionReceipt {
     pub selection_revision: u64,
     /// Morphology revision after evaluation.
     pub morphology_revision: u64,
+    /// App-local authority revision after evaluation.
+    pub authority_revision: u64,
 }
 
 /// Concise member state for the semantic DOM surface.
@@ -594,6 +774,8 @@ pub struct MemberSummary {
     pub behavior: CollectiveBehavior,
     /// Canonical morphology group containing this member.
     pub group_id: u8,
+    /// Current app-local synthetic lease holder, if any.
+    pub lease_holder_operator_id: Option<u8>,
 }
 
 /// One canonical morphology group's complete public roster and observed extent.
@@ -607,6 +789,23 @@ pub struct GroupSummary {
     pub formation_scale: f32,
     /// Maximum observed member distance from the current group centroid.
     pub formation_extent: f32,
+}
+
+/// One active app-local simulated authority lease.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct LeaseSummary {
+    /// Canonical leased member identifier.
+    pub member_id: u16,
+    /// Current app-local synthetic operator holder.
+    pub holder_operator_id: u8,
+    /// Fixed tick at which the lease was originally acquired.
+    pub acquired_at_tick: u64,
+    /// Exclusive fixed tick at which the lease expires.
+    pub expires_at_tick: u64,
+    /// Fixed steps remaining at the current tick.
+    pub remaining_steps: u64,
+    /// Explicit pending receiver, if the current holder offered a handoff.
+    pub pending_handoff_to: Option<u8>,
 }
 
 /// Count of members currently assigned to each collective steering rule.
@@ -674,6 +873,10 @@ pub struct PublicState {
     pub groups: Vec<GroupSummary>,
     /// Monotonic revision fencing split, merge, and rescale operations.
     pub morphology_revision: u64,
+    /// Active per-member leases in canonical member-ID order.
+    pub leases: Vec<LeaseSummary>,
+    /// Monotonic app-local authority revision fencing every lease mutation and use.
+    pub authority_revision: u64,
     /// Active additive personal fields in stable identifier order.
     pub fields: Vec<FieldSummary>,
     /// Number of app-local synthetic contributor channels currently represented.

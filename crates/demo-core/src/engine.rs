@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::action::{
     ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, DynamicsControlMode,
     DynamicsRates, FieldLifetime, FieldPolarity, FieldSummary, GroupPartitionRule, GroupSummary,
-    MemberSummary, PublicState, ResolvedDynamics, SemanticAction, SemanticQualities, TargetScope,
+    HandoffDecision, LeaseSummary, MemberSummary, PublicState, ResolvedDynamics, SemanticAction,
+    SemanticQualities, TargetScope,
 };
 use crate::replay::{
     validate_replay_tape, ReplayEvent, ReplayRecorder, ReplayTape, MAX_REPLAY_JSON_BYTES,
@@ -54,6 +55,12 @@ pub const MIN_FORMATION_SCALE: f32 = 0.5;
 pub const MAX_FORMATION_SCALE: f32 = 2.0;
 /// Neutral formation-scale target that adds no group radial steering.
 pub const DEFAULT_FORMATION_SCALE: f32 = 1.0;
+/// Number of fixed app-local synthetic operator channels.
+pub const MAX_SYNTHETIC_OPERATORS: u8 = 4;
+/// Maximum simultaneously active per-member leases.
+pub const MAX_ACTIVE_LEASES: usize = 8;
+/// Maximum fixed-step lease lifetime accepted by the public reconstruction.
+pub const MAX_LEASE_LIFETIME_STEPS: u32 = 600;
 
 // App-owned qualitative interpolation endpoints. The source projection supplies
 // directions and coupled variables, not portable coefficients.
@@ -112,6 +119,16 @@ struct FieldState {
     expires_at_tick: Option<u64>,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LeaseState {
+    member_id: u16,
+    holder_operator_id: u8,
+    acquired_at_tick: u64,
+    expires_at_tick: u64,
+    pending_handoff_to: Option<u8>,
+}
+
 /// Error returned when a deterministic snapshot or Matter payload is invalid.
 #[derive(Debug)]
 pub enum DemoError {
@@ -157,6 +174,7 @@ struct DemoSnapshot {
     resolved_dynamics: ResolvedDynamics,
     fields: Vec<FieldState>,
     groups: Vec<GroupState>,
+    leases: Vec<LeaseState>,
     scope: TargetScope,
     primary_member: Option<u16>,
     subgroup_members: Vec<u16>,
@@ -166,6 +184,7 @@ struct DemoSnapshot {
     state_revision: u64,
     selection_revision: u64,
     morphology_revision: u64,
+    authority_revision: u64,
 }
 
 /// Deterministic scene state and app-local semantic reducer.
@@ -262,6 +281,7 @@ impl DemoCore {
     /// Applies one semantic action and returns a bounded receipt.
     #[must_use]
     #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::too_many_lines)] // One explicit reducer entry point keeps every action on one path.
     pub fn dispatch(&mut self, action: SemanticAction) -> ActionReceipt {
         let recorded_action = action.clone();
         let receipt = match action {
@@ -313,6 +333,55 @@ impl DemoCore {
                 scale,
                 expected_morphology_revision,
             } => self.set_formation_scale(group_id, scale, expected_morphology_revision),
+            SemanticAction::RequestLease {
+                member_id,
+                operator_id,
+                lifetime_steps,
+                expected_authority_revision,
+            } => self.request_lease(
+                member_id,
+                operator_id,
+                lifetime_steps,
+                expected_authority_revision,
+            ),
+            SemanticAction::ReleaseLease {
+                member_id,
+                operator_id,
+                expected_authority_revision,
+            } => self.release_lease(member_id, operator_id, expected_authority_revision),
+            SemanticAction::OfferLeaseHandoff {
+                member_id,
+                holder_operator_id,
+                receiver_operator_id,
+                expected_authority_revision,
+            } => self.offer_lease_handoff(
+                member_id,
+                holder_operator_id,
+                receiver_operator_id,
+                expected_authority_revision,
+            ),
+            SemanticAction::ResolveLeaseHandoff {
+                member_id,
+                receiver_operator_id,
+                decision,
+                expected_authority_revision,
+            } => self.resolve_lease_handoff(
+                member_id,
+                receiver_operator_id,
+                decision,
+                expected_authority_revision,
+            ),
+            SemanticAction::SetLeasedBehavior {
+                member_id,
+                operator_id,
+                behavior,
+                expected_authority_revision,
+            } => self.set_leased_behavior(
+                member_id,
+                operator_id,
+                behavior,
+                expected_authority_revision,
+            ),
             SemanticAction::PlaceField {
                 field_id,
                 contributor_id,
@@ -412,6 +481,19 @@ impl DemoCore {
                 )),
             })
             .collect();
+        let leases = self
+            .snapshot
+            .leases
+            .iter()
+            .map(|lease| LeaseSummary {
+                member_id: lease.member_id,
+                holder_operator_id: lease.holder_operator_id,
+                acquired_at_tick: lease.acquired_at_tick,
+                expires_at_tick: lease.expires_at_tick,
+                remaining_steps: lease.expires_at_tick.saturating_sub(self.snapshot.tick),
+                pending_handoff_to: lease.pending_handoff_to,
+            })
+            .collect();
         let mut speed_total = 0.0;
         let mut behavior_counts = BehaviorCounts {
             flock: 0,
@@ -443,6 +525,8 @@ impl DemoCore {
                     behavior,
                     group_id: group_id_for_member(&self.snapshot.groups, member_id)
                         .unwrap_or_default(),
+                    lease_holder_operator_id: lease_for_member(&self.snapshot.leases, member_id)
+                        .map(|lease| lease.holder_operator_id),
                 }
             })
             .collect();
@@ -463,6 +547,8 @@ impl DemoCore {
             resolved_dynamics: public_resolved(self.snapshot.resolved_dynamics),
             groups,
             morphology_revision: self.snapshot.morphology_revision,
+            leases,
+            authority_revision: self.snapshot.authority_revision,
             fields,
             active_contributor_count,
             state_revision: self.snapshot.state_revision,
@@ -973,6 +1059,299 @@ impl DemoCore {
         })
     }
 
+    fn request_lease(
+        &mut self,
+        member_id: u16,
+        operator_id: u8,
+        lifetime_steps: u32,
+        expected_authority_revision: u64,
+    ) -> ActionReceipt {
+        if let Some(receipt) = self.reject_stale_authority(expected_authority_revision) {
+            return receipt;
+        }
+        if !valid_member(member_id) {
+            return self.rejected(ActionCode::InvalidMember, "That member does not exist.");
+        }
+        if !valid_operator(operator_id) {
+            return self.rejected(
+                ActionCode::InvalidOperator,
+                "That synthetic operator channel does not exist.",
+            );
+        }
+        if lifetime_steps == 0 || lifetime_steps > MAX_LEASE_LIFETIME_STEPS {
+            return self.rejected(
+                ActionCode::InvalidLeaseLifetime,
+                "Lease lifetime must be 1 to 600 deterministic fixed steps.",
+            );
+        }
+        if self
+            .snapshot
+            .leases
+            .binary_search_by_key(&member_id, |lease| lease.member_id)
+            .is_ok()
+        {
+            return self.rejected(
+                ActionCode::LeaseAlreadyHeld,
+                "That member already has an active lease.",
+            );
+        }
+        if self.snapshot.leases.len() >= MAX_ACTIVE_LEASES {
+            return self.rejected(
+                ActionCode::LeaseLimitReached,
+                "The scene already contains eight active leases.",
+            );
+        }
+        let Some(expires_at_tick) = self.snapshot.tick.checked_add(u64::from(lifetime_steps))
+        else {
+            return self.rejected(
+                ActionCode::InvalidLeaseLifetime,
+                "Lease expiry overflowed the deterministic tick range.",
+            );
+        };
+        let insertion = self
+            .snapshot
+            .leases
+            .binary_search_by_key(&member_id, |lease| lease.member_id)
+            .unwrap_or_else(|index| index);
+        self.snapshot.leases.insert(
+            insertion,
+            LeaseState {
+                member_id,
+                holder_operator_id: operator_id,
+                acquired_at_tick: self.snapshot.tick,
+                expires_at_tick,
+                pending_handoff_to: None,
+            },
+        );
+        self.bump_authority();
+        self.accepted(
+            ActionCode::LeaseAcquired,
+            format!(
+                "Synthetic operator {} acquired member {} for {lifetime_steps} fixed steps.",
+                operator_id + 1,
+                member_id + 1
+            ),
+            vec![member_id],
+        )
+    }
+
+    fn release_lease(
+        &mut self,
+        member_id: u16,
+        operator_id: u8,
+        expected_authority_revision: u64,
+    ) -> ActionReceipt {
+        if let Some(receipt) = self.reject_stale_authority(expected_authority_revision) {
+            return receipt;
+        }
+        if let Some(receipt) = self.reject_invalid_lease_actor(member_id, operator_id) {
+            return receipt;
+        }
+        let Ok(index) = self
+            .snapshot
+            .leases
+            .binary_search_by_key(&member_id, |lease| lease.member_id)
+        else {
+            return self.rejected(
+                ActionCode::MissingLease,
+                "That member has no current unexpired lease.",
+            );
+        };
+        if self.snapshot.leases[index].holder_operator_id != operator_id {
+            return self.rejected(
+                ActionCode::NotLeaseHolder,
+                "Only the exact current holder may release this lease.",
+            );
+        }
+        self.snapshot.leases.remove(index);
+        self.bump_authority();
+        self.accepted(
+            ActionCode::LeaseReleased,
+            format!(
+                "Synthetic operator {} released member {}.",
+                operator_id + 1,
+                member_id + 1
+            ),
+            vec![member_id],
+        )
+    }
+
+    fn offer_lease_handoff(
+        &mut self,
+        member_id: u16,
+        holder_operator_id: u8,
+        receiver_operator_id: u8,
+        expected_authority_revision: u64,
+    ) -> ActionReceipt {
+        if let Some(receipt) = self.reject_stale_authority(expected_authority_revision) {
+            return receipt;
+        }
+        if let Some(receipt) = self.reject_invalid_lease_actor(member_id, holder_operator_id) {
+            return receipt;
+        }
+        if !valid_operator(receiver_operator_id) || receiver_operator_id == holder_operator_id {
+            return self.rejected(
+                ActionCode::InvalidHandoff,
+                "A handoff receiver must be a valid operator distinct from the holder.",
+            );
+        }
+        let Ok(index) = self
+            .snapshot
+            .leases
+            .binary_search_by_key(&member_id, |lease| lease.member_id)
+        else {
+            return self.rejected(
+                ActionCode::MissingLease,
+                "That member has no current unexpired lease.",
+            );
+        };
+        let lease = &self.snapshot.leases[index];
+        if lease.holder_operator_id != holder_operator_id {
+            return self.rejected(
+                ActionCode::NotLeaseHolder,
+                "Only the exact current holder may offer this lease.",
+            );
+        }
+        if lease.pending_handoff_to.is_some() {
+            return self.rejected(
+                ActionCode::HandoffAlreadyPending,
+                "Resolve the existing handoff offer before making another.",
+            );
+        }
+        self.snapshot.leases[index].pending_handoff_to = Some(receiver_operator_id);
+        self.bump_authority();
+        self.accepted(
+            ActionCode::LeaseHandoffOffered,
+            format!(
+                "Synthetic operator {} offered member {} to operator {}; expiry is unchanged.",
+                holder_operator_id + 1,
+                member_id + 1,
+                receiver_operator_id + 1
+            ),
+            vec![member_id],
+        )
+    }
+
+    fn resolve_lease_handoff(
+        &mut self,
+        member_id: u16,
+        receiver_operator_id: u8,
+        decision: HandoffDecision,
+        expected_authority_revision: u64,
+    ) -> ActionReceipt {
+        if let Some(receipt) = self.reject_stale_authority(expected_authority_revision) {
+            return receipt;
+        }
+        if let Some(receipt) = self.reject_invalid_lease_actor(member_id, receiver_operator_id) {
+            return receipt;
+        }
+        let Ok(index) = self
+            .snapshot
+            .leases
+            .binary_search_by_key(&member_id, |lease| lease.member_id)
+        else {
+            return self.rejected(
+                ActionCode::MissingLease,
+                "That member has no current unexpired lease.",
+            );
+        };
+        if self.snapshot.leases[index].pending_handoff_to != Some(receiver_operator_id) {
+            return self.rejected(
+                ActionCode::MissingHandoff,
+                "No pending handoff names that member and receiver.",
+            );
+        }
+        self.snapshot.leases[index].pending_handoff_to = None;
+        let (code, summary) = match decision {
+            HandoffDecision::Accept => {
+                self.snapshot.leases[index].holder_operator_id = receiver_operator_id;
+                (
+                    ActionCode::LeaseHandoffAccepted,
+                    format!(
+                        "Synthetic operator {} accepted member {}; the original expiry remains.",
+                        receiver_operator_id + 1,
+                        member_id + 1
+                    ),
+                )
+            }
+            HandoffDecision::Decline => (
+                ActionCode::LeaseHandoffDeclined,
+                format!(
+                    "Synthetic operator {} declined member {}; the current holder remains.",
+                    receiver_operator_id + 1,
+                    member_id + 1
+                ),
+            ),
+        };
+        self.bump_authority();
+        self.accepted(code, summary, vec![member_id])
+    }
+
+    fn set_leased_behavior(
+        &mut self,
+        member_id: u16,
+        operator_id: u8,
+        behavior: CollectiveBehavior,
+        expected_authority_revision: u64,
+    ) -> ActionReceipt {
+        if let Some(receipt) = self.reject_stale_authority(expected_authority_revision) {
+            return receipt;
+        }
+        if let Some(receipt) = self.reject_invalid_lease_actor(member_id, operator_id) {
+            return receipt;
+        }
+        let Ok(index) = self
+            .snapshot
+            .leases
+            .binary_search_by_key(&member_id, |lease| lease.member_id)
+        else {
+            return self.rejected(
+                ActionCode::MissingLease,
+                "That member has no current unexpired lease.",
+            );
+        };
+        if self.snapshot.leases[index].holder_operator_id != operator_id {
+            return self.rejected(
+                ActionCode::NotLeaseHolder,
+                "Only the exact current holder may use this lease.",
+            );
+        }
+        self.snapshot.behaviors[usize::from(member_id)] = behavior;
+        self.bump_authority();
+        self.accepted(
+            ActionCode::LeasedBehaviorSet,
+            format!(
+                "Synthetic operator {} set member {} to {} through its current lease.",
+                operator_id + 1,
+                member_id + 1,
+                behavior_label(behavior)
+            ),
+            vec![member_id],
+        )
+    }
+
+    fn reject_stale_authority(&self, expected_authority_revision: u64) -> Option<ActionReceipt> {
+        (expected_authority_revision != self.snapshot.authority_revision).then(|| {
+            self.rejected(
+                ActionCode::StaleAuthority,
+                "Lease authority changed before this operation was applied.",
+            )
+        })
+    }
+
+    fn reject_invalid_lease_actor(&self, member_id: u16, operator_id: u8) -> Option<ActionReceipt> {
+        if !valid_member(member_id) {
+            Some(self.rejected(ActionCode::InvalidMember, "That member does not exist."))
+        } else if !valid_operator(operator_id) {
+            Some(self.rejected(
+                ActionCode::InvalidOperator,
+                "That synthetic operator channel does not exist.",
+            ))
+        } else {
+            None
+        }
+    }
+
     fn place_field(
         &mut self,
         field_id: u16,
@@ -1163,10 +1542,12 @@ impl DemoCore {
         let next_state_revision = self.snapshot.state_revision.saturating_add(1);
         let next_selection_revision = self.snapshot.selection_revision.saturating_add(1);
         let next_morphology_revision = self.snapshot.morphology_revision.saturating_add(1);
+        let next_authority_revision = self.snapshot.authority_revision.saturating_add(1);
         self.snapshot = initial_snapshot(seed);
         self.snapshot.state_revision = next_state_revision;
         self.snapshot.selection_revision = next_selection_revision;
         self.snapshot.morphology_revision = next_morphology_revision;
+        self.snapshot.authority_revision = next_authority_revision;
         self.accepted(
             ActionCode::Reset,
             "Reset to the current seed's paused initial state.".to_owned(),
@@ -1178,10 +1559,12 @@ impl DemoCore {
         let next_state_revision = self.snapshot.state_revision.saturating_add(1);
         let next_selection_revision = self.snapshot.selection_revision.saturating_add(1);
         let next_morphology_revision = self.snapshot.morphology_revision.saturating_add(1);
+        let next_authority_revision = self.snapshot.authority_revision.saturating_add(1);
         self.snapshot = initial_snapshot(seed);
         self.snapshot.state_revision = next_state_revision;
         self.snapshot.selection_revision = next_selection_revision;
         self.snapshot.morphology_revision = next_morphology_revision;
+        self.snapshot.authority_revision = next_authority_revision;
         self.accepted(
             ActionCode::SeedRestarted,
             format!("Restarted with seed {seed} in a paused state."),
@@ -1306,6 +1689,13 @@ impl DemoCore {
         self.snapshot
             .fields
             .retain(|field| field.expires_at_tick.map_or(true, |expiry| expiry > tick));
+        let lease_count_before_expiry = self.snapshot.leases.len();
+        self.snapshot
+            .leases
+            .retain(|lease| lease.expires_at_tick > tick);
+        if self.snapshot.leases.len() != lease_count_before_expiry {
+            self.snapshot.authority_revision = self.snapshot.authority_revision.saturating_add(1);
+        }
         self.snapshot.particles.particles = next;
         self.snapshot.particles.time_seconds += FIXED_STEP_SECONDS;
         self.bump_state();
@@ -1372,6 +1762,11 @@ impl DemoCore {
         self.bump_state();
     }
 
+    fn bump_authority(&mut self) {
+        self.snapshot.authority_revision = self.snapshot.authority_revision.saturating_add(1);
+        self.bump_state();
+    }
+
     fn accepted(
         &self,
         code: ActionCode,
@@ -1386,6 +1781,7 @@ impl DemoCore {
             state_revision: self.snapshot.state_revision,
             selection_revision: self.snapshot.selection_revision,
             morphology_revision: self.snapshot.morphology_revision,
+            authority_revision: self.snapshot.authority_revision,
         }
     }
 
@@ -1398,6 +1794,7 @@ impl DemoCore {
             state_revision: self.snapshot.state_revision,
             selection_revision: self.snapshot.selection_revision,
             morphology_revision: self.snapshot.morphology_revision,
+            authority_revision: self.snapshot.authority_revision,
         }
     }
 }
@@ -1719,6 +2116,7 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
             member_ids: (0..MEMBER_COUNT).map(member_id).collect(),
             formation_scale: DEFAULT_FORMATION_SCALE,
         }],
+        leases: Vec::new(),
         scope: TargetScope::Member,
         primary_member: Some(0),
         subgroup_members: (0..DEFAULT_SUBGROUP_COUNT).map(member_id).collect(),
@@ -1728,6 +2126,7 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
         state_revision: 0,
         selection_revision: 0,
         morphology_revision: 0,
+        authority_revision: 0,
     }
 }
 
@@ -1754,6 +2153,7 @@ fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
     }
     validate_snapshot_groups(snapshot)?;
     validate_snapshot_dynamics(snapshot)?;
+    validate_snapshot_leases(snapshot)?;
     if snapshot.fields.len() > MAX_PERSONAL_FIELDS {
         return Err(DemoError::InvalidSnapshot("too many personal fields"));
     }
@@ -1855,6 +2255,45 @@ fn validate_snapshot_groups(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
     Ok(())
 }
 
+fn validate_snapshot_leases(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
+    if snapshot.leases.len() > MAX_ACTIVE_LEASES {
+        return Err(DemoError::InvalidSnapshot("too many active leases"));
+    }
+    let mut previous_member_id = None;
+    for lease in &snapshot.leases {
+        if !valid_member(lease.member_id)
+            || previous_member_id.is_some_and(|previous| previous >= lease.member_id)
+        {
+            return Err(DemoError::InvalidSnapshot(
+                "leases must use sorted unique canonical member IDs",
+            ));
+        }
+        if !valid_operator(lease.holder_operator_id)
+            || lease.pending_handoff_to.is_some_and(|receiver| {
+                !valid_operator(receiver) || receiver == lease.holder_operator_id
+            })
+        {
+            return Err(DemoError::InvalidSnapshot(
+                "lease holder or handoff receiver is invalid",
+            ));
+        }
+        if lease.acquired_at_tick > snapshot.tick || lease.expires_at_tick <= snapshot.tick {
+            return Err(DemoError::InvalidSnapshot(
+                "lease acquisition or expiry tick is stale",
+            ));
+        }
+        if lease.expires_at_tick.saturating_sub(lease.acquired_at_tick)
+            > u64::from(MAX_LEASE_LIFETIME_STEPS)
+        {
+            return Err(DemoError::InvalidSnapshot(
+                "lease lifetime exceeds the app-local bound",
+            ));
+        }
+        previous_member_id = Some(lease.member_id);
+    }
+    Ok(())
+}
+
 fn validate_snapshot_dynamics(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
     if !valid_dynamics_rate(snapshot.raw_dynamics_rates.alignment)
         || !valid_dynamics_rate(snapshot.raw_dynamics_rates.cohesion)
@@ -1903,6 +2342,25 @@ fn integrate_particle(
 
 fn valid_member(member_id: u16) -> bool {
     usize::from(member_id) < MEMBER_COUNT
+}
+
+fn valid_operator(operator_id: u8) -> bool {
+    operator_id < MAX_SYNTHETIC_OPERATORS
+}
+
+fn lease_for_member(leases: &[LeaseState], member_id: u16) -> Option<&LeaseState> {
+    leases
+        .binary_search_by_key(&member_id, |lease| lease.member_id)
+        .ok()
+        .map(|index| &leases[index])
+}
+
+const fn behavior_label(behavior: CollectiveBehavior) -> &'static str {
+    match behavior {
+        CollectiveBehavior::Flock => "Flock",
+        CollectiveBehavior::Cohere => "Cohere",
+        CollectiveBehavior::Disperse => "Disperse",
+    }
 }
 
 fn valid_formation_scale(scale: f32) -> bool {

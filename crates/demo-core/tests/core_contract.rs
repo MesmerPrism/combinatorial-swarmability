@@ -2,10 +2,11 @@
 
 use combinatorial_swarmability_demo_core::{
     ActionCode, CollectiveBehavior, DemoCore, DynamicsControlMode, FieldLifetime, FieldPolarity,
-    GroupPartitionRule, PublicState, SemanticAction, TargetScope, DEFAULT_DYNAMICS_RATES,
-    DEFAULT_FORMATION_SCALE, DEFAULT_SEMANTIC_QUALITIES, FRAME_ROW_WIDTH, MAX_DYNAMICS_RATE,
-    MAX_FIELD_LIFETIME_STEPS, MAX_FORMATION_SCALE, MAX_GROUPS, MAX_PERSONAL_FIELDS,
-    MAX_SEMANTIC_QUALITY, MEMBER_COUNT, MIN_FORMATION_SCALE,
+    GroupPartitionRule, HandoffDecision, PublicState, SemanticAction, TargetScope,
+    DEFAULT_DYNAMICS_RATES, DEFAULT_FORMATION_SCALE, DEFAULT_SEMANTIC_QUALITIES, FRAME_ROW_WIDTH,
+    MAX_ACTIVE_LEASES, MAX_DYNAMICS_RATE, MAX_FIELD_LIFETIME_STEPS, MAX_FORMATION_SCALE,
+    MAX_GROUPS, MAX_LEASE_LIFETIME_STEPS, MAX_PERSONAL_FIELDS, MAX_SEMANTIC_QUALITY,
+    MAX_SYNTHETIC_OPERATORS, MEMBER_COUNT, MIN_FORMATION_SCALE,
 };
 use sha2::{Digest, Sha256};
 
@@ -97,6 +98,65 @@ fn set_formation_scale(group_id: u8, scale: f32, revision: u64) -> SemanticActio
         group_id,
         scale,
         expected_morphology_revision: revision,
+    }
+}
+
+fn request_lease(
+    member_id: u16,
+    operator_id: u8,
+    lifetime_steps: u32,
+    revision: u64,
+) -> SemanticAction {
+    SemanticAction::RequestLease {
+        member_id,
+        operator_id,
+        lifetime_steps,
+        expected_authority_revision: revision,
+    }
+}
+
+fn release_lease(member_id: u16, operator_id: u8, revision: u64) -> SemanticAction {
+    SemanticAction::ReleaseLease {
+        member_id,
+        operator_id,
+        expected_authority_revision: revision,
+    }
+}
+
+fn offer_handoff(member_id: u16, holder: u8, receiver: u8, revision: u64) -> SemanticAction {
+    SemanticAction::OfferLeaseHandoff {
+        member_id,
+        holder_operator_id: holder,
+        receiver_operator_id: receiver,
+        expected_authority_revision: revision,
+    }
+}
+
+fn resolve_handoff(
+    member_id: u16,
+    receiver: u8,
+    decision: HandoffDecision,
+    revision: u64,
+) -> SemanticAction {
+    SemanticAction::ResolveLeaseHandoff {
+        member_id,
+        receiver_operator_id: receiver,
+        decision,
+        expected_authority_revision: revision,
+    }
+}
+
+fn set_leased_behavior(
+    member_id: u16,
+    operator_id: u8,
+    behavior: CollectiveBehavior,
+    revision: u64,
+) -> SemanticAction {
+    SemanticAction::SetLeasedBehavior {
+        member_id,
+        operator_id,
+        behavior,
+        expected_authority_revision: revision,
     }
 }
 
@@ -241,6 +301,7 @@ fn pause_step_reset_and_seeded_restart_are_deterministic() {
     restarted_value["state_revision"] = fresh_value["state_revision"].clone();
     restarted_value["selection_revision"] = fresh_value["selection_revision"].clone();
     restarted_value["morphology_revision"] = fresh_value["morphology_revision"].clone();
+    restarted_value["authority_revision"] = fresh_value["authority_revision"].clone();
     assert_eq!(restarted_value, fresh_value);
 }
 
@@ -1321,6 +1382,292 @@ fn formation_scale_changes_same_seed_extent_without_rewriting_dynamics() {
     );
     assert_conserved_membership(&compact_state);
     assert_conserved_membership(&expanded_state);
+}
+
+#[test]
+fn lease_state_machine_requires_holder_and_explicit_receiver_consent() {
+    let mut core = DemoCore::new(2_301);
+    let acquired = core.dispatch(request_lease(4, 0, 8, 0));
+    assert!(acquired.accepted);
+    assert_eq!(acquired.code, ActionCode::LeaseAcquired);
+    assert_eq!(acquired.authority_revision, 1);
+    let lease = &core.public_state().leases[0];
+    assert_eq!(lease.member_id, 4);
+    assert_eq!(lease.holder_operator_id, 0);
+    assert_eq!(lease.remaining_steps, 8);
+
+    assert_eq!(
+        core.dispatch(request_lease(4, 0, 8, 1)).code,
+        ActionCode::LeaseAlreadyHeld
+    );
+    assert_eq!(
+        core.dispatch(release_lease(4, 0, 0)).code,
+        ActionCode::StaleAuthority
+    );
+    assert_eq!(
+        core.dispatch(release_lease(4, 1, 1)).code,
+        ActionCode::NotLeaseHolder
+    );
+    assert!(
+        core.dispatch(set_leased_behavior(4, 0, CollectiveBehavior::Disperse, 1))
+            .accepted
+    );
+    assert_eq!(
+        core.public_state().members[4].behavior,
+        CollectiveBehavior::Disperse
+    );
+
+    assert!(core.dispatch(offer_handoff(4, 0, 1, 2)).accepted);
+    assert_eq!(core.public_state().leases[0].pending_handoff_to, Some(1));
+    assert_eq!(
+        core.dispatch(offer_handoff(4, 0, 2, 3)).code,
+        ActionCode::HandoffAlreadyPending
+    );
+    assert_eq!(
+        core.dispatch(resolve_handoff(4, 2, HandoffDecision::Accept, 3))
+            .code,
+        ActionCode::MissingHandoff
+    );
+    let expiry = core.public_state().leases[0].expires_at_tick;
+    assert!(
+        core.dispatch(resolve_handoff(4, 1, HandoffDecision::Decline, 3))
+            .accepted
+    );
+    assert_eq!(core.public_state().leases[0].holder_operator_id, 0);
+    assert!(core.dispatch(offer_handoff(4, 0, 1, 4)).accepted);
+    let accepted = core.dispatch(resolve_handoff(4, 1, HandoffDecision::Accept, 5));
+    assert_eq!(accepted.code, ActionCode::LeaseHandoffAccepted);
+    let lease = &core.public_state().leases[0];
+    assert_eq!(lease.holder_operator_id, 1);
+    assert_eq!(lease.expires_at_tick, expiry);
+    assert_eq!(lease.pending_handoff_to, None);
+    assert_eq!(
+        core.dispatch(release_lease(4, 0, 6)).code,
+        ActionCode::NotLeaseHolder
+    );
+    assert!(core.dispatch(release_lease(4, 1, 6)).accepted);
+    assert!(core.public_state().leases.is_empty());
+}
+
+#[test]
+fn lease_expiry_uses_exact_fixed_step_boundary_and_fences_replayed_use() {
+    let mut core = DemoCore::new(2_302);
+    let acquire = request_lease(3, 2, 3, 0);
+    assert!(core.dispatch(acquire.clone()).accepted);
+    assert_eq!(core.dispatch(acquire).code, ActionCode::StaleAuthority);
+    assert!(core.dispatch(SemanticAction::Step).accepted);
+    assert!(core.dispatch(SemanticAction::Step).accepted);
+    assert_eq!(core.public_state().leases[0].remaining_steps, 1);
+    let before_expiry_revision = core.public_state().authority_revision;
+    assert!(core.dispatch(SemanticAction::Step).accepted);
+    let expired = core.public_state();
+    assert!(expired.leases.is_empty());
+    assert_eq!(expired.authority_revision, before_expiry_revision + 1);
+    assert_eq!(
+        core.dispatch(set_leased_behavior(
+            3,
+            2,
+            CollectiveBehavior::Cohere,
+            expired.authority_revision,
+        ))
+        .code,
+        ActionCode::MissingLease
+    );
+
+    let replay = core.replay_json().expect("expired lease replay serializes");
+    let replayed = DemoCore::from_replay_json(&replay).expect("expired lease replay restores");
+    assert_eq!(
+        core.snapshot_json().expect("snapshot serializes"),
+        replayed.snapshot_json().expect("snapshot serializes")
+    );
+}
+
+#[test]
+fn invalid_lease_actions_and_damaged_snapshots_fail_closed() {
+    let mut core = DemoCore::new(2_303);
+    let initial = core.snapshot_json().expect("snapshot serializes");
+    for (action, code) in [
+        (request_lease(24, 0, 10, 0), ActionCode::InvalidMember),
+        (
+            request_lease(0, MAX_SYNTHETIC_OPERATORS, 10, 0),
+            ActionCode::InvalidOperator,
+        ),
+        (request_lease(0, 0, 0, 0), ActionCode::InvalidLeaseLifetime),
+        (
+            request_lease(0, 0, MAX_LEASE_LIFETIME_STEPS + 1, 0),
+            ActionCode::InvalidLeaseLifetime,
+        ),
+        (release_lease(0, 0, 0), ActionCode::MissingLease),
+    ] {
+        let receipt = core.dispatch(action);
+        assert!(!receipt.accepted);
+        assert_eq!(receipt.code, code);
+        assert_eq!(initial, core.snapshot_json().expect("snapshot serializes"));
+    }
+
+    assert!(core.dispatch(request_lease(0, 0, 10, 0)).accepted);
+    assert_eq!(
+        core.dispatch(offer_handoff(0, 0, 0, 1)).code,
+        ActionCode::InvalidHandoff
+    );
+    assert_eq!(
+        core.dispatch(offer_handoff(0, 0, MAX_SYNTHETIC_OPERATORS, 1))
+            .code,
+        ActionCode::InvalidHandoff
+    );
+
+    let snapshot = core.snapshot_json().expect("snapshot serializes");
+    for mutation in ["member", "holder", "receiver", "expiry", "duplicate"] {
+        let mut damaged: serde_json::Value =
+            serde_json::from_str(&snapshot).expect("snapshot parses");
+        match mutation {
+            "member" => damaged["leases"][0]["member_id"] = serde_json::json!(24),
+            "holder" => damaged["leases"][0]["holder_operator_id"] = serde_json::json!(4),
+            "receiver" => damaged["leases"][0]["pending_handoff_to"] = serde_json::json!(0),
+            "expiry" => damaged["leases"][0]["expires_at_tick"] = serde_json::json!(0),
+            "duplicate" => {
+                let lease = damaged["leases"][0].clone();
+                damaged["leases"].as_array_mut().unwrap().push(lease);
+            }
+            _ => unreachable!(),
+        }
+        assert!(DemoCore::from_snapshot_json(&damaged.to_string()).is_err());
+    }
+    assert!(serde_json::from_str::<SemanticAction>(
+        r#"{"type":"request_lease","member_id":0,"operator_id":0,"lifetime_steps":10,"expected_authority_revision":0,"account_id":"private"}"#
+    )
+    .is_err());
+}
+
+#[test]
+fn lease_caps_and_distinct_member_request_order_are_deterministic() {
+    let mut ordered = DemoCore::new(2_304);
+    let mut reversed = DemoCore::new(2_304);
+    for (revision, member) in (0..MAX_ACTIVE_LEASES).enumerate() {
+        assert!(
+            ordered
+                .dispatch(request_lease(
+                    u16::try_from(member).unwrap(),
+                    u8::try_from(member % usize::from(MAX_SYNTHETIC_OPERATORS)).unwrap(),
+                    20,
+                    u64::try_from(revision).unwrap(),
+                ))
+                .accepted
+        );
+    }
+    for (revision, member) in (0..MAX_ACTIVE_LEASES).rev().enumerate() {
+        assert!(
+            reversed
+                .dispatch(request_lease(
+                    u16::try_from(member).unwrap(),
+                    u8::try_from(member % usize::from(MAX_SYNTHETIC_OPERATORS)).unwrap(),
+                    20,
+                    u64::try_from(revision).unwrap(),
+                ))
+                .accepted
+        );
+    }
+    assert_eq!(
+        ordered.public_state().leases,
+        reversed.public_state().leases
+    );
+    assert_eq!(
+        ordered
+            .dispatch(request_lease(
+                u16::try_from(MAX_ACTIVE_LEASES).unwrap(),
+                0,
+                20,
+                u64::try_from(MAX_ACTIVE_LEASES).unwrap(),
+            ))
+            .code,
+        ActionCode::LeaseLimitReached
+    );
+}
+
+#[test]
+fn leases_survive_morphology_and_preserve_unrelated_mechanism_state() {
+    let mut core = DemoCore::new(2_305);
+    assert!(
+        core.dispatch(SemanticAction::SetScope {
+            scope: TargetScope::Subgroup,
+        })
+        .accepted
+    );
+    assert!(
+        core.dispatch(place_field(
+            0,
+            3,
+            0.3,
+            0.2,
+            FieldPolarity::Repel,
+            FieldLifetime::Persistent,
+        ))
+        .accepted
+    );
+    assert!(core.dispatch(set_space(0.8)).accepted);
+    assert!(core.dispatch(request_lease(1, 0, 40, 0)).accepted);
+    let before_morphology = core.public_state();
+    assert!(core.dispatch(split_group(0, 1, 0)).accepted);
+    assert!(core.dispatch(set_formation_scale(1, 1.4, 1)).accepted);
+    assert!(core.dispatch(merge_groups(1, 0, 0, 2)).accepted);
+    let after_morphology = core.public_state();
+    assert_eq!(after_morphology.leases, before_morphology.leases);
+    assert_eq!(after_morphology.authority_revision, 1);
+    assert_eq!(after_morphology.scope, before_morphology.scope);
+    assert_eq!(
+        after_morphology.subgroup_members,
+        before_morphology.subgroup_members
+    );
+    assert_eq!(after_morphology.fields, before_morphology.fields);
+    assert_eq!(
+        after_morphology.semantic_qualities,
+        before_morphology.semantic_qualities
+    );
+    assert_eq!(
+        after_morphology.resolved_dynamics,
+        before_morphology.resolved_dynamics
+    );
+
+    assert!(
+        core.dispatch(set_leased_behavior(1, 0, CollectiveBehavior::Cohere, 1))
+            .accepted
+    );
+    let checkpoint = core.snapshot_json().expect("checkpoint serializes");
+    let restored = DemoCore::from_snapshot_json(&checkpoint).expect("checkpoint restores");
+    assert_eq!(restored.public_state().leases[0].remaining_steps, 40);
+    let replay = core.replay_json().expect("replay serializes");
+    let replayed = DemoCore::from_replay_json(&replay).expect("replay restores");
+    assert_eq!(
+        checkpoint,
+        replayed.snapshot_json().expect("snapshot serializes")
+    );
+
+    let authority_before_reset = core.public_state().authority_revision;
+    assert!(core.dispatch(SemanticAction::Reset).accepted);
+    let reset = core.public_state();
+    assert!(reset.leases.is_empty());
+    assert_eq!(reset.authority_revision, authority_before_reset + 1);
+    assert!(reset.fields.is_empty());
+    assert_eq!(reset.groups.len(), 1);
+}
+
+#[test]
+fn same_seed_lease_actions_produce_exact_behavior_and_motion() {
+    let mut first = DemoCore::new(2_306);
+    let mut second = DemoCore::new(2_306);
+    for core in [&mut first, &mut second] {
+        assert!(core.dispatch(request_lease(2, 1, 60, 0)).accepted);
+        assert!(
+            core.dispatch(set_leased_behavior(2, 1, CollectiveBehavior::Disperse, 1))
+                .accepted
+        );
+        run_steps(core, 24);
+    }
+    assert_eq!(
+        first.snapshot_json().expect("snapshot serializes"),
+        second.snapshot_json().expect("snapshot serializes")
+    );
+    assert_eq!(first.frame_rows().unwrap(), second.frame_rows().unwrap());
 }
 
 #[test]

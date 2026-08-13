@@ -24,6 +24,10 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Split and merge use labelled native group selects and buttons. Formation
   scale uses a native bounded range input plus an explicit apply button. The
   deterministic replay tape is the equivalent route for exact repetition.
+- Lease authority uses labelled native operator/member/receiver selects,
+  request/release/offer/accept/decline buttons, a fixed-step lifetime range,
+  and one holder-gated behavior select. Unavailable commands are disabled and
+  accompanied by an ordinary-text reason.
 - The member grid exposes primary and subgroup selection without requiring
   precise canvas pointing.
 - Catalogue facets are labelled native selects with one clear-filter action.
@@ -62,6 +66,10 @@ The canvas is a visual projection, not the sole interface or state authority.
   observed extents, before/after action traces, and morphology revisions are
   structured text. Canvas group rings are supplemental rather than the only
   membership signal.
+- Every active lease exposes its canonical member, synthetic holder,
+  acquisition/expiry ticks, remaining fixed steps, pending receiver, and
+  authority revision as text. Lease actions and automatic expiry have
+  before/action/policy/receipt/after traces outside the canvas.
 - The canvas has a concise text description and is never focus-required.
 - Focus indicators are explicit; forced-colors and 200% zoom layouts are
   supported.
@@ -80,6 +88,7 @@ Desktop and mobile checks cover keyboard selection/action, pointer selection,
 scope-aware collective rules, field placement/motion/polarity/lifetime,
 raw and semantic dynamics sliders, resolved-vector and mode-distribution
 consequences, split/merge/rescale controls, group rosters and metrics,
+lease acquisition/release/handoff/expiry, consent states and disabled reasons,
 inspection without state drift, focus visibility,
 reduced-motion state, intentional start, pause, single-step, reset/replay, and
 horizontal overflow.

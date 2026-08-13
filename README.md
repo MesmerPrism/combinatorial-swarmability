@@ -26,6 +26,12 @@ group ID, and each group has an independently bounded 0.50–2.00 formation-scal
 target. Membership, identity, scale, and morphology revision live in the same
 deterministic reducer and replay tape; these app-owned rules do not claim to
 reproduce the authors' implementation or validated multi-user governance.
+Four fixed synthetic operator channels can acquire at most eight per-member
+leases for 1–600 deterministic fixed steps. Release and behavior use require
+the exact holder; handoff requires a holder offer plus an explicit named-
+receiver accept or decline, and preserves the original expiry. This app-local
+authority has no accounts, persistence, wall clock, networking, or session
+meaning and is not evidence of equitable governance or mixed-ability access.
 The same core projects simulation state through Rusty Matter's
 renderer-neutral `ParticleRenderPayload`; a thin WebAssembly adapter exposes a
 bounded frame buffer to a Canvas2D renderer. The canvas is not the only

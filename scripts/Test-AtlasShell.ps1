@@ -44,7 +44,15 @@ $requiredIds = @(
     'split-partition-rule', 'split-new-group', 'split-group-button',
     'merge-first-group', 'merge-second-group', 'merge-survivor-group',
     'merge-groups-button', 'scale-group', 'formation-scale',
-    'formation-scale-value', 'set-formation-scale-button'
+    'formation-scale-value', 'set-formation-scale-button', 'state-lease-count',
+    'state-authority-revision', 'metric-leases', 'metric-pending-handoffs',
+    'metric-lease-remaining', 'lease-roster', 'lease-trace-before',
+    'lease-trace-action', 'lease-trace-policy', 'lease-trace-receipt',
+    'lease-trace-after', 'lease-controls', 'lease-operator', 'lease-member',
+    'lease-receiver', 'lease-lifetime', 'lease-lifetime-value',
+    'request-lease-button', 'release-lease-button', 'offer-handoff-button',
+    'accept-handoff-button', 'decline-handoff-button', 'leased-behavior',
+    'use-lease-button', 'lease-command-reason'
 )
 foreach ($id in $requiredIds) {
     if ($html -notmatch "id=[`"']$([regex]::Escape($id))[`"']") {
@@ -74,8 +82,9 @@ if ($styles -notmatch '\[hidden\]\s*\{[^}]*display:\s*none\s*!important') {
 if ($styles -notmatch '@media\s*\(prefers-reduced-motion:\s*reduce\)' -or
     $styles -notmatch '@media\s*\(forced-colors:\s*active\)' -or
     $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.resolved-inspector' -or
-    $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.morphology-trace') {
-    throw 'Semantic dynamics and morphology must retain reduced-motion and forced-colors contracts.'
+    $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.morphology-trace' -or
+    $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.lease-trace') {
+    throw 'Semantic dynamics, morphology, and leases must retain reduced-motion and forced-colors contracts.'
 }
 foreach ($functionName in @(
     'populateAtlasFilters', 'renderAtlasList', 'renderAtlasDetail',
@@ -87,7 +96,10 @@ foreach ($functionName in @(
     'bindSemanticSlider', 'updateSemanticControls', 'updateSemanticOutput',
     'renderResolvedDynamics', 'splitSelectedGroup', 'mergeSelectedGroups',
     'setSelectedFormationScale', 'nextCanonicalGroupId', 'updateMorphologyControls',
-    'renderMorphologyRoster', 'updateMorphologyTrace'
+    'renderMorphologyRoster', 'updateMorphologyTrace', 'requestSelectedLease',
+    'releaseSelectedLease', 'offerSelectedHandoff', 'resolveSelectedHandoff',
+    'useSelectedLease', 'updateLeaseControls', 'renderLeaseRoster',
+    'updateLeaseTrace', 'traceAnimatedLeaseExpiry'
 )) {
     if ($script -notmatch "function\s+$functionName\s*\(") {
         throw "Atlas adapter is missing $functionName."
@@ -129,6 +141,18 @@ foreach ($morphologyAction in @('split_group', 'merge_groups', 'set_formation_sc
     if ($script -notmatch [regex]::Escape($morphologyAction)) {
         throw "The accessible morphology adapter is missing semantic action: $morphologyAction"
     }
+}
+foreach ($leaseAction in @('request_lease', 'release_lease', 'offer_lease_handoff', 'resolve_lease_handoff', 'set_leased_behavior')) {
+    if ($script -notmatch [regex]::Escape($leaseAction)) {
+        throw "The accessible lease adapter is missing semantic action: $leaseAction"
+    }
+}
+if ($script -notmatch 'const MAX_ACTIVE_LEASES = 8;' -or
+    $script -notmatch 'expected_authority_revision: state\.authority_revision') {
+    throw 'Lease controls must preserve the bounded authority-revision contract.'
+}
+if ($html -notmatch 'id=[`"'']lease-lifetime[`"''][^>]*min=[`"'']1[`"''][^>]*max=[`"'']600[`"''][^>]*step=[`"'']1[`"''][^>]*value=[`"'']120[`"'']') {
+    throw 'Lease lifetime must preserve its accepted range, step, and default.'
 }
 if ($script -notmatch 'const MAX_MORPHOLOGY_GROUPS = 8;' -or
     $script -notmatch 'expected_morphology_revision: state\.morphology_revision') {
