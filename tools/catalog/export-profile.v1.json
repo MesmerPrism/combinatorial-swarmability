@@ -1,6 +1,6 @@
 {
   "schema": "combinatorial.swarmability.public.catalog.export-profile.v1",
-  "export_version": "2026-08-13.2",
+  "export_version": "2026-08-13.3",
   "expected_source_sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
   "expected_source_row_count": 26,
   "generated_on": "2026-08-13",
@@ -28,8 +28,8 @@
       "control_family": "exogenous-environment-or-field",
       "public_id": "additive-personal-fields",
       "summary": "Reconstruct additive personal attractor and repellent fields while retaining contributor provenance.",
-      "status": "planned-reconstruction",
-      "semantic_actions": ["place_field", "move_field", "set_field_polarity"],
+      "status": "implemented-reconstruction",
+      "semantic_actions": ["place_field", "move_field", "set_field_polarity", "remove_field"],
       "does_not_claim": "This reconstruction does not reproduce the original instrument or establish fairness, accessibility, agency, or an optimal overlap policy.",
       "facets": {
         "input_routes": ["device-motion", "gesture"],

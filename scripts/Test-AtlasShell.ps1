@@ -92,7 +92,11 @@ if ($script -notmatch 'event instanceof PointerEvent && event\.detail > 0') {
 
 $implemented = @($catalog.items | Where-Object { $_.reconstruction.status -eq 'implemented-reconstruction' })
 $implementedIds = @($implemented.public_id | Sort-Object)
-$expectedImplementedIds = @('save-retrieve-reset-replay', 'scope-and-granularity')
+$expectedImplementedIds = @(
+    'additive-personal-fields',
+    'save-retrieve-reset-replay',
+    'scope-and-granularity'
+)
 if (($implementedIds -join "`n") -ne ($expectedImplementedIds -join "`n")) {
     throw "The atlas implemented set differs from the accepted mechanism slices: $($implementedIds -join ', ')"
 }
@@ -106,4 +110,4 @@ foreach ($item in @($catalog.items)) {
     }
 }
 
-Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, two bound reconstructions, and bounded additive-field controls.'
+Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, and three bound reconstructions.'
