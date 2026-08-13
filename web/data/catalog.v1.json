@@ -1,12 +1,12 @@
 {
   "schema": "combinatorial.swarmability.public.catalog.v1",
-  "export_version": "2026-08-13.1",
+  "export_version": "2026-08-13.2",
   "source_binding": {
     "authority": "research-memory",
     "sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
     "row_count": 26,
     "schema_sha256": "393344ead11abeaba854a80f08abc484c4f8ce6d983d5a4d058abca6b4e180a9",
-    "profile_sha256": "2292712d8d5799ff556b73d4cb467fd272d5e1331c9b630d4478ed23b221afd4"
+    "profile_sha256": "63cd04374fea86e948e586d486057c7f1e6c6bda43e7485b852efa6bc11b97e3"
   },
   "items": [
     {
@@ -468,7 +468,7 @@
         "substrate": "robotic"
       },
       "reconstruction": {
-        "status": "planned-reconstruction",
+        "status": "implemented-reconstruction",
         "summary": "Use save, retrieve, reset, and deterministic replay as atlas-wide history infrastructure.",
         "interaction": "create named checkpoints retrieve one or issue a visible reset",
         "effect": "collective state returns to a stored snapshot while the event history remains visible in the reconstruction",

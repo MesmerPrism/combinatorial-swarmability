@@ -29,8 +29,10 @@ Each item separates these allowlisted objects:
 
 The exact field contract is `schemas/public-catalog.v1.schema.json`. Missing
 public URLs remain `null`; they are never inferred from private process
-metadata. The first manifest remains `pending_locked_review` until the exact
-output hash is accepted.
+metadata. The first exact export was accepted as `2026-08-13.1`. Later
+conforming revisions increment the export version, reproduce from the same
+hash-bound authority input, and retain `accepted_locked_review` only when they
+remain inside the accepted schema and allowlist policy.
 
 ## Rejected content
 

@@ -48,7 +48,8 @@ The locked review command supplies the private authority path at runtime:
 
 The generated manifest binds the source byte hash, row count, encoding, line
 endings, schema hash, profile hash, output hash, selected/rejected counts, and
-boundary checks. The first manifest remains `pending_locked_review` until its
-exact output hash is accepted. Later conforming additions still require
-source-level evidence review, but may reuse the accepted transform as ordinary
-fast product work.
+boundary checks. The first exact export was accepted as `2026-08-13.1`.
+Conforming revisions increment the export version and may retain
+`accepted_locked_review` only while reproducing under the accepted schema and
+allowlist policy. Source-level evidence review remains required, while the
+accepted transform may be reused as ordinary fast product work.

@@ -76,8 +76,10 @@ if ($script -notmatch 'event instanceof PointerEvent && event\.detail > 0') {
 }
 
 $implemented = @($catalog.items | Where-Object { $_.reconstruction.status -eq 'implemented-reconstruction' })
-if ($implemented.Count -ne 1 -or $implemented[0].public_id -ne 'scope-and-granularity') {
-    throw 'The first shell must enable only the accepted scope-and-granularity reconstruction.'
+$implementedIds = @($implemented.public_id | Sort-Object)
+$expectedImplementedIds = @('save-retrieve-reset-replay', 'scope-and-granularity')
+if (($implementedIds -join "`n") -ne ($expectedImplementedIds -join "`n")) {
+    throw "The atlas implemented set differs from the accepted mechanism slices: $($implementedIds -join ', ')"
 }
 foreach ($item in @($catalog.items)) {
     if ([string]::IsNullOrWhiteSpace($item.source.paper_url)) {
@@ -89,4 +91,4 @@ foreach ($item in @($catalog.items)) {
     }
 }
 
-Write-Host 'Atlas shell contract passed: seven filter facets, source/evidence/transfer cards, action provenance, metrics, and one enabled reconstruction.'
+Write-Host 'Atlas shell contract passed: seven filter facets, source/evidence/transfer cards, action provenance, metrics, and two enabled reconstructions.'
