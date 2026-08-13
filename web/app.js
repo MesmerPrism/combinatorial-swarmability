@@ -1,4 +1,4 @@
-import init, { DemoEngine } from "./pkg/demo_wasm.js?v=semantic-v1";
+import init, { DemoEngine } from "./pkg/demo_wasm.js?v=morphology-v1";
 
 const DEFAULT_SEED = "2026";
 const SPEED_DELTA = 0.10;
@@ -6,8 +6,10 @@ const RELATION_RADIUS_SQUARED = 0.34 * 0.34;
 const MAX_CHECKPOINTS = 5;
 const MAX_SESSION_HISTORY = 50;
 const MAX_PERSONAL_FIELDS = 8;
+const MAX_MORPHOLOGY_GROUPS = 8;
 const CONTRIBUTOR_LABELS = ["A", "B", "C", "D"];
 const CONTRIBUTOR_COLORS = ["#3f6f85", "#a85d45", "#657a46", "#755b9b"];
+const GROUP_COLORS = ["#315d6c", "#9b563f", "#5d753c", "#705296", "#936d22", "#276d65", "#8a4968", "#57698f"];
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const canvas = document.querySelector("#swarm-canvas");
@@ -32,6 +34,11 @@ const semanticSpace = document.querySelector("#semantic-space");
 const semanticTime = document.querySelector("#semantic-time");
 const semanticWeight = document.querySelector("#semantic-weight");
 const semanticFlow = document.querySelector("#semantic-flow");
+const splitSourceGroup = document.querySelector("#split-source-group");
+const mergeFirstGroup = document.querySelector("#merge-first-group");
+const mergeSecondGroup = document.querySelector("#merge-second-group");
+const scaleGroup = document.querySelector("#scale-group");
+const formationScale = document.querySelector("#formation-scale");
 const atlasFilters = document.querySelector("#atlas-filters");
 const atlasList = document.querySelector("#atlas-list");
 const atlasCount = document.querySelector("#atlas-count");
@@ -50,7 +57,7 @@ let reducedTimestamp = 0;
 let rowWidth = 0;
 
 await init({
-  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=semantic-v1", import.meta.url),
+  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=morphology-v1", import.meta.url),
 });
 engine = new DemoEngine(DEFAULT_SEED);
 rowWidth = DemoEngine.frame_row_width();
@@ -167,6 +174,14 @@ function bindControls() {
   bindSemanticSlider(semanticTime, "set_time_quality", "time");
   bindSemanticSlider(semanticWeight, "set_weight_quality", "weight");
   bindSemanticSlider(semanticFlow, "set_flow_quality", "flow");
+  document.querySelector("#split-group-button").addEventListener("click", splitSelectedGroup);
+  document.querySelector("#merge-groups-button").addEventListener("click", mergeSelectedGroups);
+  document.querySelector("#set-formation-scale-button").addEventListener("click", setSelectedFormationScale);
+  splitSourceGroup.addEventListener("change", updateMorphologyControls);
+  mergeFirstGroup.addEventListener("change", updateMorphologyControls);
+  mergeSecondGroup.addEventListener("change", updateMorphologyControls);
+  scaleGroup.addEventListener("change", syncFormationScaleEditor);
+  formationScale.addEventListener("input", updateFormationScaleOutput);
   checkpointSelect.addEventListener("change", () => {
     const checkpoint = savedCheckpoints.get(checkpointSelect.value);
     if (checkpoint) {
@@ -287,6 +302,138 @@ function interactionTrace(event, normalizedInput, policy = "") {
     normalizedInput,
     policy,
   };
+}
+
+function splitSelectedGroup(event) {
+  const sourceGroupId = Number(splitSourceGroup.value);
+  const newGroupId = nextCanonicalGroupId();
+  if (!Number.isInteger(sourceGroupId) || newGroupId === null) {
+    announce("No canonical split is available.", true);
+    return;
+  }
+  dispatch(
+    {
+      type: "split_group",
+      source_group_id: sourceGroupId,
+      new_group_id: newGroupId,
+      partition_rule: "alternating_member_id",
+      expected_morphology_revision: state.morphology_revision,
+    },
+    interactionTrace(
+      event,
+      `morphology.split(group-${sourceGroupId + 1}, alternating-member-id)`,
+      `Group ${sourceGroupId + 1} retains its identity and scale; the smallest unused canonical ID becomes Group ${newGroupId + 1}`
+    )
+  );
+}
+
+function mergeSelectedGroups(event) {
+  const firstGroupId = Number(mergeFirstGroup.value);
+  const secondGroupId = Number(mergeSecondGroup.value);
+  if (!Number.isInteger(firstGroupId) || !Number.isInteger(secondGroupId) || firstGroupId === secondGroupId) {
+    announce("Choose two distinct groups to merge.", true);
+    return;
+  }
+  const survivorGroupId = Math.min(firstGroupId, secondGroupId);
+  dispatch(
+    {
+      type: "merge_groups",
+      group_a_id: firstGroupId,
+      group_b_id: secondGroupId,
+      survivor_group_id: survivorGroupId,
+      expected_morphology_revision: state.morphology_revision,
+    },
+    interactionTrace(
+      event,
+      `morphology.merge(group-${firstGroupId + 1}, group-${secondGroupId + 1})`,
+      `Lower canonical ID Group ${survivorGroupId + 1} survives and retains its scale; membership is conserved`
+    )
+  );
+}
+
+function setSelectedFormationScale(event) {
+  const groupId = Number(scaleGroup.value);
+  const scale = Number(formationScale.value);
+  dispatch(
+    {
+      type: "set_formation_scale",
+      group_id: groupId,
+      scale,
+      expected_morphology_revision: state.morphology_revision,
+    },
+    interactionTrace(
+      event,
+      `morphology.scale(group-${groupId + 1}, ${scale.toFixed(2)})`,
+      `Only Group ${groupId + 1}'s formation-scale target changes; dynamics, fields, scope, and provenance remain unchanged`
+    )
+  );
+}
+
+function nextCanonicalGroupId() {
+  const activeIds = new Set(state.groups.map((group) => group.group_id));
+  for (let groupId = 0; groupId < MAX_MORPHOLOGY_GROUPS; groupId += 1) {
+    if (!activeIds.has(groupId)) {
+      return groupId;
+    }
+  }
+  return null;
+}
+
+function replaceGroupOptions(select, previousValue) {
+  const fragment = document.createDocumentFragment();
+  state.groups.forEach((group) => {
+    const option = document.createElement("option");
+    option.value = String(group.group_id);
+    option.textContent = `Group ${group.group_id + 1} · ${group.member_ids.length} members`;
+    fragment.append(option);
+  });
+  select.replaceChildren(fragment);
+  select.value = state.groups.some((group) => String(group.group_id) === previousValue)
+    ? previousValue
+    : String(state.groups[0].group_id);
+}
+
+function updateMorphologyControls() {
+  const splitValue = splitSourceGroup.value;
+  const firstValue = mergeFirstGroup.value;
+  const secondValue = mergeSecondGroup.value;
+  const scaleValue = scaleGroup.value;
+  replaceGroupOptions(splitSourceGroup, splitValue);
+  replaceGroupOptions(mergeFirstGroup, firstValue);
+  replaceGroupOptions(mergeSecondGroup, secondValue);
+  replaceGroupOptions(scaleGroup, scaleValue);
+
+  if (state.groups.length > 1 && mergeFirstGroup.value === mergeSecondGroup.value) {
+    const alternative = state.groups.find((group) => String(group.group_id) !== mergeFirstGroup.value);
+    mergeSecondGroup.value = String(alternative.group_id);
+  }
+
+  const newGroupId = nextCanonicalGroupId();
+  document.querySelector("#split-new-group").textContent = newGroupId === null
+    ? "Maximum reached"
+    : `Group ${newGroupId + 1}`;
+  const splitGroup = state.groups.find((group) => String(group.group_id) === splitSourceGroup.value);
+  document.querySelector("#split-group-button").disabled =
+    newGroupId === null || !splitGroup || splitGroup.member_ids.length < 2;
+
+  const distinctMerge = state.groups.length > 1 && mergeFirstGroup.value !== mergeSecondGroup.value;
+  document.querySelector("#merge-groups-button").disabled = !distinctMerge;
+  document.querySelector("#merge-survivor-group").textContent = distinctMerge
+    ? `Group ${Math.min(Number(mergeFirstGroup.value), Number(mergeSecondGroup.value)) + 1}`
+    : "Choose two groups";
+  syncFormationScaleEditor();
+}
+
+function syncFormationScaleEditor() {
+  const group = state.groups.find((candidate) => String(candidate.group_id) === scaleGroup.value);
+  if (group) {
+    formationScale.value = String(group.formation_scale);
+    updateFormationScaleOutput();
+  }
+}
+
+function updateFormationScaleOutput() {
+  document.querySelector("#formation-scale-value").textContent = Number(formationScale.value).toFixed(2);
 }
 
 function adjustSpeed(delta, trace) {
@@ -629,10 +776,14 @@ function restartSeed(event) {
 }
 
 function dispatch(action, trace = {}) {
+  const morphologyBefore = isMorphologyAction(action) ? morphologySummary(state) : "";
   try {
     const receipt = JSON.parse(engine.dispatch_json(JSON.stringify(action)));
     refreshAll();
     updateActionTrace(trace, action, receipt);
+    if (morphologyBefore) {
+      updateMorphologyTrace(morphologyBefore, trace, action, receipt);
+    }
     announce(receipt.summary, !receipt.accepted);
     syncAnimation();
     return receipt;
@@ -645,12 +796,33 @@ function dispatch(action, trace = {}) {
 function updateActionTrace(trace, action, receipt) {
   const policy = trace.policy || `${scopeLabel(state.scope)} → ${memberList(state.target_members)}`;
   const accepted = receipt.accepted ? "accepted" : "rejected";
-  const revision = `state ${receipt.state_revision}, selection ${receipt.selection_revision}`;
+  const revision = `state ${receipt.state_revision}, selection ${receipt.selection_revision}, morphology ${receipt.morphology_revision}`;
   renderActionTrace(
     { ...trace, policy },
     semanticActionLabel(action),
     `${receipt.code} · ${accepted} · ${revision}`
   );
+}
+
+function isMorphologyAction(action) {
+  return ["split_group", "merge_groups", "set_formation_scale"].includes(action.type);
+}
+
+function morphologySummary(snapshot) {
+  const groups = snapshot.groups
+    .map((group) => `Group ${group.group_id + 1}: ${group.member_ids.length} members at ${group.formation_scale.toFixed(2)}`)
+    .join("; ");
+  return `${snapshot.groups.length} ${snapshot.groups.length === 1 ? "group" : "groups"} · ${groups}`;
+}
+
+function updateMorphologyTrace(before, trace, action, receipt) {
+  const accepted = receipt.accepted ? "accepted" : "rejected";
+  document.querySelector("#morphology-trace-before").textContent = before;
+  document.querySelector("#morphology-trace-action").textContent = semanticActionLabel(action);
+  document.querySelector("#morphology-trace-policy").textContent = trace.policy;
+  document.querySelector("#morphology-trace-receipt").textContent =
+    `${receipt.code} · ${accepted} · morphology ${receipt.morphology_revision}`;
+  document.querySelector("#morphology-trace-after").textContent = morphologySummary(state);
 }
 
 function updateInfrastructureTrace(trace, action, code, accepted, detail) {
@@ -704,7 +876,7 @@ function renderSessionHistory() {
 
 function semanticActionLabel(action) {
   const parameters = Object.entries(action)
-    .filter(([key]) => key !== "type" && key !== "expected_selection_revision")
+    .filter(([key]) => !["type", "expected_selection_revision", "expected_morphology_revision"].includes(key))
     .map(([key, value]) => `${key}=${parameterLabel(value)}`);
   return parameters.length > 0 ? `${action.type}(${parameters.join(", ")})` : action.type;
 }
@@ -778,6 +950,8 @@ function updateDomState(updateControls = true) {
     `A ${state.dynamics_rates.alignment.toFixed(2)} · C ${state.dynamics_rates.cohesion.toFixed(2)} · S ${state.dynamics_rates.separation.toFixed(2)}`;
   document.querySelector("#state-semantic-qualities").textContent =
     `S ${state.semantic_qualities.space.toFixed(2)} · T ${state.semantic_qualities.time.toFixed(2)} · W ${state.semantic_qualities.weight.toFixed(2)} · F ${state.semantic_qualities.flow.toFixed(2)}`;
+  document.querySelector("#state-group-count").textContent = `${state.groups.length} of ${MAX_MORPHOLOGY_GROUPS}`;
+  document.querySelector("#state-morphology-revision").textContent = String(state.morphology_revision);
   document.querySelector("#state-relations").textContent = String(relationTotal);
   document.querySelector("#state-field-count").textContent = `${state.fields.length} of ${MAX_PERSONAL_FIELDS}`;
   document.querySelector("#state-contributor-count").textContent = `${state.active_contributor_count} of ${CONTRIBUTOR_LABELS.length}`;
@@ -798,15 +972,22 @@ function updateDomState(updateControls = true) {
     `${state.behavior_counts.flock} / ${state.behavior_counts.cohere} / ${state.behavior_counts.disperse}`;
   document.querySelector("#metric-relations").textContent = String(relationTotal);
   document.querySelector("#metric-fields").textContent = String(state.fields.length);
+  document.querySelector("#metric-groups").textContent = String(state.groups.length);
+  document.querySelector("#metric-group-sizes").textContent = state.groups
+    .map((group) => group.member_ids.length)
+    .join(" / ");
+  document.querySelector("#metric-formation-extent").textContent =
+    (state.groups.reduce((total, group) => total + group.formation_extent, 0) / state.groups.length).toFixed(3);
   document.querySelector("#step-button").disabled = state.running;
   document.querySelector("#start-button").disabled = state.running;
   document.querySelector("#pause-button").disabled = !state.running;
   renderResolvedDynamics();
+  renderMorphologyRoster();
   updateHistoryControls();
   updateFieldControls();
   canvas.setAttribute(
     "aria-label",
-    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. ${dynamicsModeLabel()} resolve alignment ${state.resolved_dynamics.rates.alignment.toFixed(2)}, cohesion ${state.resolved_dynamics.rates.cohesion.toFixed(2)}, separation ${state.resolved_dynamics.rates.separation.toFixed(2)}, speed scale ${state.resolved_dynamics.speed_scale.toFixed(2)}, damping ${state.resolved_dynamics.damping.toFixed(2)}, and jitter ${state.resolved_dynamics.jitter.toFixed(2)}. ${state.fields.length} additive personal fields.`
+    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. ${dynamicsModeLabel()} resolve alignment ${state.resolved_dynamics.rates.alignment.toFixed(2)}, cohesion ${state.resolved_dynamics.rates.cohesion.toFixed(2)}, separation ${state.resolved_dynamics.rates.separation.toFixed(2)}, speed scale ${state.resolved_dynamics.speed_scale.toFixed(2)}, damping ${state.resolved_dynamics.damping.toFixed(2)}, and jitter ${state.resolved_dynamics.jitter.toFixed(2)}. ${state.fields.length} additive personal fields. ${morphologySummary(state)}.`
   );
   updateMotionMode();
 
@@ -818,7 +999,18 @@ function updateDomState(updateControls = true) {
     seedInput.value = state.seed;
     updateDynamicsControls();
     updateSemanticControls();
+    updateMorphologyControls();
   }
+}
+
+function renderMorphologyRoster() {
+  const fragment = document.createDocumentFragment();
+  state.groups.forEach((group) => {
+    const item = document.createElement("li");
+    item.textContent = `Group ${group.group_id + 1}: ${group.member_ids.length} members (${memberList(group.member_ids)}); scale ${group.formation_scale.toFixed(2)}; observed extent ${group.formation_extent.toFixed(3)}.`;
+    fragment.append(item);
+  });
+  document.querySelector("#morphology-group-roster").replaceChildren(fragment);
 }
 
 function updateFieldControls() {
@@ -947,7 +1139,9 @@ function updateMemberControls() {
   const members = new Map(state.members.map((member) => [member.member_id, member]));
   memberControls.querySelectorAll("button[data-member-id]").forEach((button) => {
     const memberId = Number(button.dataset.memberId);
+    const member = members.get(memberId);
     button.setAttribute("aria-pressed", String(state.primary_member === memberId));
+    button.setAttribute("aria-label", `Select member ${memberId + 1} as primary; morphology Group ${(member?.group_id ?? 0) + 1}`);
   });
   memberControls.querySelectorAll("input[data-group-member-id]").forEach((input) => {
     input.checked = subgroup.has(Number(input.dataset.groupMemberId));
@@ -1092,9 +1286,17 @@ function drawMember(row, width, height, showIndividualTarget) {
   const subgroup = row[8] > 0.5;
   const targeted = row[9] > 0.5;
   const behavior = Math.round(row[10]);
+  const groupId = Math.round(row[11]);
 
   context.save();
   context.translate(x, y);
+
+  context.strokeStyle = GROUP_COLORS[groupId] || "#315d6c";
+  context.lineWidth = 3;
+  context.setLineDash([]);
+  context.beginPath();
+  context.arc(0, 0, radius + 12, 0, Math.PI * 2);
+  context.stroke();
 
   if (targeted && showIndividualTarget) {
     context.strokeStyle = "#463b69";

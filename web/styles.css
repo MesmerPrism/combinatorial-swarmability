@@ -470,6 +470,12 @@ canvas {
   border-radius: 50%;
 }
 
+.mark-morphology {
+  border: 3px solid #315d6c;
+  border-radius: 50%;
+  background: transparent;
+}
+
 .mark-field-repel {
   border-style: dashed;
 }
@@ -654,6 +660,38 @@ canvas {
   font-size: 0.86rem;
 }
 
+.morphology-grid {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.85fr) minmax(0, 1.15fr);
+  gap: 0.5rem 0.7rem;
+  align-items: center;
+  margin: 0.8rem 0;
+  font-family: var(--font-ui);
+  font-size: 0.86rem;
+}
+
+.morphology-grid select,
+#scale-group {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+}
+
+.morphology-grid output {
+  font-weight: 800;
+}
+
+.morphology-operation {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--line);
+}
+
+#split-group-button,
+#merge-groups-button,
+#set-formation-scale-button {
+  width: 100%;
+}
+
 .field-grid select,
 #field-select {
   width: 100%;
@@ -806,6 +844,21 @@ canvas {
   padding-left: 1.3rem;
   font-family: var(--font-ui);
   font-size: 0.84rem;
+}
+
+.morphology-group-roster {
+  margin: 0;
+  padding-left: 1.3rem;
+  font-family: var(--font-ui);
+  font-size: 0.84rem;
+}
+
+.morphology-group-roster li + li {
+  margin-top: 0.35rem;
+}
+
+.morphology-trace {
+  border-left-color: #315d6c;
 }
 
 .field-state-list li + li {
@@ -1091,7 +1144,8 @@ a:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .field-grid {
+  .field-grid,
+  .morphology-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1133,6 +1187,8 @@ a:focus-visible {
   .atlas-detail,
   .atlas-list,
   .resolved-inspector,
+  .morphology-trace,
+  .mark-morphology,
   .coupling-table th,
   .coupling-table td {
     border-color: CanvasText;

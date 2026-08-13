@@ -36,7 +36,15 @@ $requiredIds = @(
     'semantic-weight', 'semantic-weight-value', 'semantic-flow', 'semantic-flow-value',
     'semantic-raw-inspector', 'resolved-control-mode', 'resolved-alignment',
     'resolved-cohesion', 'resolved-separation', 'resolved-speed-scale',
-    'resolved-damping', 'resolved-jitter'
+    'resolved-damping', 'resolved-jitter', 'state-group-count',
+    'state-morphology-revision', 'metric-groups', 'metric-group-sizes',
+    'metric-formation-extent', 'morphology-group-roster', 'morphology-trace-before',
+    'morphology-trace-action', 'morphology-trace-policy', 'morphology-trace-receipt',
+    'morphology-trace-after', 'morphology-controls', 'split-source-group',
+    'split-partition-rule', 'split-new-group', 'split-group-button',
+    'merge-first-group', 'merge-second-group', 'merge-survivor-group',
+    'merge-groups-button', 'scale-group', 'formation-scale',
+    'formation-scale-value', 'set-formation-scale-button'
 )
 foreach ($id in $requiredIds) {
     if ($html -notmatch "id=[`"']$([regex]::Escape($id))[`"']") {
@@ -65,8 +73,9 @@ if ($styles -notmatch '\[hidden\]\s*\{[^}]*display:\s*none\s*!important') {
 }
 if ($styles -notmatch '@media\s*\(prefers-reduced-motion:\s*reduce\)' -or
     $styles -notmatch '@media\s*\(forced-colors:\s*active\)' -or
-    $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.resolved-inspector') {
-    throw 'Semantic dynamics must retain reduced-motion and forced-colors contracts.'
+    $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.resolved-inspector' -or
+    $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.morphology-trace') {
+    throw 'Semantic dynamics and morphology must retain reduced-motion and forced-colors contracts.'
 }
 foreach ($functionName in @(
     'populateAtlasFilters', 'renderAtlasList', 'renderAtlasDetail',
@@ -76,7 +85,9 @@ foreach ($functionName in @(
     'removeSelectedField', 'renderFieldStateList', 'drawPersonalFields',
     'bindDynamicsSlider', 'updateDynamicsControls', 'updateDynamicsOutput',
     'bindSemanticSlider', 'updateSemanticControls', 'updateSemanticOutput',
-    'renderResolvedDynamics'
+    'renderResolvedDynamics', 'splitSelectedGroup', 'mergeSelectedGroups',
+    'setSelectedFormationScale', 'nextCanonicalGroupId', 'updateMorphologyControls',
+    'renderMorphologyRoster', 'updateMorphologyTrace'
 )) {
     if ($script -notmatch "function\s+$functionName\s*\(") {
         throw "Atlas adapter is missing $functionName."
@@ -113,6 +124,18 @@ foreach ($semanticAction in @('set_space_quality', 'set_time_quality', 'set_weig
     if ($script -notmatch [regex]::Escape($semanticAction)) {
         throw "The accessible semantic dynamics adapter is missing semantic action: $semanticAction"
     }
+}
+foreach ($morphologyAction in @('split_group', 'merge_groups', 'set_formation_scale')) {
+    if ($script -notmatch [regex]::Escape($morphologyAction)) {
+        throw "The accessible morphology adapter is missing semantic action: $morphologyAction"
+    }
+}
+if ($script -notmatch 'const MAX_MORPHOLOGY_GROUPS = 8;' -or
+    $script -notmatch 'expected_morphology_revision: state\.morphology_revision') {
+    throw 'Morphology controls must preserve the bounded group and stale-action contracts.'
+}
+if ($html -notmatch 'id=[`"'']formation-scale[`"''][^>]*min=[`"'']0\.5[`"''][^>]*max=[`"'']2[`"''][^>]*step=[`"'']0\.05[`"''][^>]*value=[`"'']1[`"'']') {
+    throw 'Formation scale must preserve its accepted range, step, and default.'
 }
 if ($script -match 'set_randomness') {
     throw 'Raw dynamics must not expose an arbitrary randomness parameter.'

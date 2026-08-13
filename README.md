@@ -20,6 +20,12 @@ by raw controls—there is no second simulation path. The browser shows both the
 semantic values and every resolved parameter. This reconstructs reported
 relationships from a perception study of pre-rendered clips; it is not the
 authors' runtime, live body control, or a validated universal Laban interpreter.
+Canonical morphology groups are separate from target scope. A split applies a
+fixed alternating-member-ID partition, a merge retains the lower participating
+group ID, and each group has an independently bounded 0.50–2.00 formation-scale
+target. Membership, identity, scale, and morphology revision live in the same
+deterministic reducer and replay tape; these app-owned rules do not claim to
+reproduce the authors' implementation or validated multi-user governance.
 The same core projects simulation state through Rusty Matter's
 renderer-neutral `ParticleRenderPayload`; a thin WebAssembly adapter exposes a
 bounded frame buffer to a Canvas2D renderer. The canvas is not the only

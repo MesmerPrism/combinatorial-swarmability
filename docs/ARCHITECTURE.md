@@ -35,6 +35,14 @@ separation, Time scales speed, Weight couples cohesion, and Flow couples
 damping and deterministic jitter. Semantic and raw controls select the owner
 of one explicit `ResolvedDynamics` vector consumed by the established core;
 they never select different simulation implementations.
+Morphology actions explicitly split, merge, and rescale canonical app-owned
+groups. IDs are bounded to 0–7, member rosters remain sorted and exhaustive,
+split retains its source ID while assigning the smallest unused ID, and merge
+retains the lower participating ID and its scale. Formation scale is a separate
+0.50–2.00 radial target with neutral default 1.00; it does not rewrite the
+resolved dynamics vector. Morphology groups are independent from the existing
+target subgroup, fields, contributor provenance, behavior assignment, and
+dynamics authority.
 
 ## Non-scope
 
@@ -71,6 +79,7 @@ scope and authority policy -- selection revision / resolved targets
 field combination policy -- bounded additive superposition / expiry
 raw dynamics policy -- bounded global rates / deterministic weighted selection
 semantic dynamics policy -- bounded qualities / inspectable app-owned interpolation
+morphology policy -- canonical group IDs / conservation / formation scale
         |
         v
 fixed-step deterministic flock state
@@ -125,11 +134,22 @@ The browser owns only session-local checkpoint names, up to five replay-tape
 copies, and a 50-entry readable operation log. Those controls add no durable
 storage, account, network, or multi-user authority.
 
+Morphology actions carry their own expected revision so stale group operations
+fail closed independently of target selection. `SplitGroup` uses one explicit
+alternating ascending-member-ID rule. `MergeGroups` names both participants and
+the canonical survivor; operand order is intentionally commutative only for the
+same exact pair. `SetFormationScale` names one existing group. Unknown,
+duplicate, noncanonical, singleton, over-limit, stale, nonfinite, and
+out-of-range requests are rejected without changing state. Split and merge do
+not clear unrelated mechanisms, and all three actions use ordinary snapshot,
+checkpoint, reset, and replay paths.
+
 The Wasm adapter exposes one fixed-size row per member:
 
 ```text
 [member_id, x, y, radius, vx, vy, speed,
- primary_selected, subgroup_selected, currently_targeted, behavior_code]
+ primary_selected, subgroup_selected, currently_targeted, behavior_code,
+ morphology_group_id]
 ```
 
 Rows are reconstructed from Matter's `ParticleRenderPayload` plus app-owned
@@ -149,7 +169,9 @@ polarity, and lifetime also have non-canvas projections. The three raw rates
 and current Flock/Cohere/Disperse distribution are text. Semantic quality
 values, active control authority, all six resolved quantities, and the
 source-supported/app-owned coupling distinction are also ordinary DOM text,
-while cohesion,
+while canonical group rosters, member counts, formation scales, morphology
+revision, before/after receipts, and observed formation extent expose morphology
+without relying on the canvas. Cohesion,
 polarization, spacing, speed, and relation counts expose consequences. Replay
 event/step totals, checkpoint count, and the
 bounded session operation log also have semantic DOM projections. Animation
@@ -169,6 +191,10 @@ semantic bounds/defaults and damaged-vector rejection, deterministic
 translation and qualitative monotonicity, action-order independence,
 raw-vector equivalence, inspection stability, same-seed outcome differences,
 and coexistence with scope, fields, checkpoint, reset, and replay,
+canonical morphology identity and conservation, deterministic partition and
+merge rules, group/scale bounds, stale and damaged operation rejection,
+formation-scale effects, and coexistence with scope, fields, raw/semantic
+dynamics, checkpoints, reset, and replay,
 Matter payload conversion, exact Git dependency pins, frozen builds, the Wasm
 bundle, public-boundary scans, and browser interaction/accessibility checks.
 
@@ -201,9 +227,12 @@ actions and payloads, not DOM or Canvas code.
 | Invented coefficients look source-authored | The UI labels interpolation endpoints as app-owned and preserves the source's qualitative directions separately |
 | Inspecting translation changes the experiment | The resolved-vector panel is a read-only DOM projection with no reducer action |
 | A rendered-clip perception study is presented as live control evidence | The UI and catalogue state that live control, accessibility, agency, authorship, and a universal interpreter were not evaluated |
+| Visual clusters become hidden or inconsistent group authority | Canonical bounded groups and complete member rosters live in the reducer and semantic DOM |
+| Split or merge silently destroys unrelated state | Lifecycle tests preserve scope selection, fields, provenance, behaviors, and dynamics authority |
+| Rescale becomes an undocumented dynamics rewrite | Formation scale is an explicit per-group target with independent bounds and a neutral default |
 
 ## Next slice
 
-Bind the reviewed semantic/Laban reconstruction to its public catalogue entry,
-then continue with split, merge, and rescale. Optics integration,
+Bind the reviewed split/merge/rescale reconstruction to its public catalogue
+entry, then continue with lease, expiry, and handoff. Optics integration,
 multi-user authority, and Quest adaptation remain separate later decisions.

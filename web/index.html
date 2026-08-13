@@ -154,13 +154,14 @@
 
       <section id="demonstration" class="demo shell" aria-labelledby="demo-title">
         <div class="section-heading">
-          <h2 id="demo-title">Interactive reconstruction: scope, fields, semantic dynamics, and history</h2>
+          <h2 id="demo-title">Interactive reconstruction: scope, fields, dynamics, morphology, and history</h2>
           <p>
             Start intentionally, choose one member, the subgroup, or the whole swarm,
             then issue the same collective request through accessible browser controls.
             Place additive personal fields with explicit polarity and lifetime,
             expose bounded raw mode-transition rates, or translate Space, Time,
-            Weight, and Flow into one inspectable raw vector. Save, retrieve,
+            Weight, and Flow into one inspectable raw vector. Split and merge
+            explicit member groups or rescale their formation target. Save, retrieve,
             reset, and replay operate across the same deterministic core.
           </p>
         </div>
@@ -179,7 +180,8 @@
                 A two-dimensional synthetic swarm, initially paused. Lines show local
                 neighbour relations, while member shape indicates flock, cohere, or
                 disperse. Labelled circles show synthetic contributor fields and
-                attract or repel polarity. Select members with the controls below or
+                attract or repel polarity. Morphology groups have canonical numbered
+                identities and are also listed as text. Select members with the controls below or
                 point at a member on the canvas. Equivalent state also appears as text.
               </p>
               <div class="canvas-key" aria-hidden="true">
@@ -189,6 +191,7 @@
                 <span><i class="mark mark-flock"></i> Flock</span>
                 <span><i class="mark mark-cohere"></i> Cohere</span>
                 <span><i class="mark mark-disperse"></i> Disperse</span>
+                <span><i class="mark mark-morphology"></i> Morphology group</span>
                 <span><i class="mark mark-field-attract"></i> Attract field</span>
                 <span><i class="mark mark-field-repel"></i> Repel field</span>
               </div>
@@ -209,6 +212,8 @@
                 <div><dt>Dynamics authority</dt><dd id="state-dynamics-mode">Raw controls</dd></div>
                 <div><dt>Effective transition rates</dt><dd id="state-dynamics-rates">A 0.00 · C 0.00 · S 0.00</dd></div>
                 <div><dt>Semantic qualities</dt><dd id="state-semantic-qualities">S 0.50 · T 0.50 · W 0.50 · F 0.50</dd></div>
+                <div><dt>Morphology groups</dt><dd id="state-group-count">1 of 8</dd></div>
+                <div><dt>Morphology revision</dt><dd id="state-morphology-revision">0</dd></div>
                 <div><dt>Neighbour links</dt><dd id="state-relations">0</dd></div>
                 <div><dt>Personal fields</dt><dd id="state-field-count">0 of 8</dd></div>
                 <div><dt>Synthetic contributors</dt><dd id="state-contributor-count">0 of 4</dd></div>
@@ -230,6 +235,9 @@
                   <div><dt>Mode distribution (F/C/D)</dt><dd id="metric-distribution">24 / 0 / 0</dd></div>
                   <div><dt>Visible relations</dt><dd id="metric-relations">0</dd></div>
                   <div><dt>Active fields</dt><dd id="metric-fields">0</dd></div>
+                  <div><dt>Group count</dt><dd id="metric-groups">1</dd></div>
+                  <div><dt>Group sizes</dt><dd id="metric-group-sizes">24</dd></div>
+                  <div><dt>Mean formation extent</dt><dd id="metric-formation-extent">0.000</dd></div>
                 </dl>
                 <p class="metric-note">
                   Cohesion and polarization are unitless 0–1 summaries; spacing uses
@@ -242,6 +250,24 @@
                 <ul id="field-state-list" class="field-state-list">
                   <li>No active personal fields.</li>
                 </ul>
+                <h4>Canonical morphology groups</h4>
+                <p class="metric-note">
+                  This roster is the authoritative non-canvas view. The separate target subgroup remains a scope selection.
+                </p>
+                <ol id="morphology-group-roster" class="morphology-group-roster">
+                  <li>Group 1: 24 members; formation scale 1.00.</li>
+                </ol>
+              </section>
+
+              <section class="action-trace morphology-trace" aria-labelledby="morphology-trace-title">
+                <h4 id="morphology-trace-title">Latest morphology transition</h4>
+                <dl class="trace-grid">
+                  <div><dt>Before</dt><dd id="morphology-trace-before">One canonical group with 24 members.</dd></div>
+                  <div><dt>Semantic action</dt><dd id="morphology-trace-action">No morphology action yet</dd></div>
+                  <div><dt>Policy</dt><dd id="morphology-trace-policy">Canonical IDs and member conservation are core-owned.</dd></div>
+                  <div><dt>Receipt</dt><dd id="morphology-trace-receipt">—</dd></div>
+                  <div><dt>After</dt><dd id="morphology-trace-after">One canonical group with 24 members.</dd></div>
+                </dl>
               </section>
 
               <section class="action-trace" aria-labelledby="action-trace-title">
@@ -278,6 +304,53 @@
                 <button id="pause-button" type="button">Pause</button>
                 <button id="step-button" type="button">Step</button>
               </div>
+            </fieldset>
+
+            <fieldset id="morphology-controls">
+              <legend>Split, merge, and rescale formations</legend>
+              <p class="control-help">
+                These app-owned semantic actions alter explicit deterministic group membership and formation-scale targets.
+                They do not clear fields, target scope, contributor provenance, or raw/semantic dynamics authority.
+              </p>
+              <p class="control-help evidence-boundary">
+                This is a bounded reconstruction—not the source authors’ implementation, validated multi-user governance,
+                or a universal gesture vocabulary. Accessible selectors and replay provide the synthetic input route.
+              </p>
+
+              <div class="morphology-grid">
+                <label for="split-source-group">Source group</label>
+                <select id="split-source-group" name="split-source-group"></select>
+                <label for="split-partition-rule">Partition rule</label>
+                <select id="split-partition-rule" name="split-partition-rule">
+                  <option value="alternating_member_id">Alternating ascending member ID</option>
+                </select>
+                <span>Canonical new identity</span>
+                <output id="split-new-group">Group 2</output>
+              </div>
+              <button id="split-group-button" type="button">Split group</button>
+
+              <div class="morphology-grid morphology-operation">
+                <label for="merge-first-group">First group</label>
+                <select id="merge-first-group" name="merge-first-group"></select>
+                <label for="merge-second-group">Second group</label>
+                <select id="merge-second-group" name="merge-second-group"></select>
+                <span>Canonical survivor</span>
+                <output id="merge-survivor-group">Choose two groups</output>
+              </div>
+              <button id="merge-groups-button" type="button">Merge groups</button>
+
+              <div class="morphology-operation">
+                <label class="input-label" for="scale-group">Formation group</label>
+                <select id="scale-group" name="scale-group"></select>
+                <div class="dynamics-control">
+                  <label for="formation-scale">Formation scale <output id="formation-scale-value" for="formation-scale">1.00</output></label>
+                  <input id="formation-scale" name="formation-scale" type="range" min="0.5" max="2" step="0.05" value="1">
+                </div>
+                <button id="set-formation-scale-button" type="button">Set formation scale</button>
+              </div>
+              <p class="control-help">
+                Scale 0.50–2.00, default 1.00. It changes a separate radial formation target and never rewrites dynamics parameters.
+              </p>
             </fieldset>
 
             <fieldset>

@@ -24,6 +24,14 @@ pub enum CollectiveBehavior {
     Disperse,
 }
 
+/// Deterministic rule used to partition one canonical morphology group.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupPartitionRule {
+    /// Sort members by stable ID; source retains even ordinals and new group receives odd ordinals.
+    AlternatingMemberId,
+}
+
 /// App-owned rates for entering the three existing collective steering modes.
 ///
 /// These values are a bounded technical reconstruction of endogenous controller
@@ -189,6 +197,37 @@ pub enum SemanticAction {
         /// Bound (0) to Free (1).
         value: f32,
     },
+    /// Split one canonical morphology group by an explicit deterministic rule.
+    SplitGroup {
+        /// Existing source group whose identity and scale target remain in place.
+        source_group_id: u8,
+        /// Smallest currently unused canonical group identifier.
+        new_group_id: u8,
+        /// Explicit deterministic member partition.
+        partition_rule: GroupPartitionRule,
+        /// Morphology revision against which the operation was prepared.
+        expected_morphology_revision: u64,
+    },
+    /// Merge two exact morphology groups into the canonical lower-ID survivor.
+    MergeGroups {
+        /// First participating group; operand order does not affect the result.
+        group_a_id: u8,
+        /// Second participating group; must differ from the first.
+        group_b_id: u8,
+        /// Canonical survivor, required to be the lower participating ID.
+        survivor_group_id: u8,
+        /// Morphology revision against which the operation was prepared.
+        expected_morphology_revision: u64,
+    },
+    /// Set one group's explicit formation-scale target without changing dynamics parameters.
+    SetFormationScale {
+        /// Existing canonical group identifier.
+        group_id: u8,
+        /// Bounded multiplier around the neutral default of 1.
+        scale: f32,
+        /// Morphology revision against which the operation was prepared.
+        expected_morphology_revision: u64,
+    },
     /// Place one bounded field with synthetic contributor provenance.
     PlaceField {
         /// Stable field identifier within the scene.
@@ -282,6 +321,23 @@ enum SemanticActionWire {
     SetFlowQuality {
         value: f32,
     },
+    SplitGroup {
+        source_group_id: u8,
+        new_group_id: u8,
+        partition_rule: GroupPartitionRule,
+        expected_morphology_revision: u64,
+    },
+    MergeGroups {
+        group_a_id: u8,
+        group_b_id: u8,
+        survivor_group_id: u8,
+        expected_morphology_revision: u64,
+    },
+    SetFormationScale {
+        group_id: u8,
+        scale: f32,
+        expected_morphology_revision: u64,
+    },
     PlaceField {
         field_id: u16,
         contributor_id: u8,
@@ -344,6 +400,37 @@ impl<'de> Deserialize<'de> for SemanticAction {
             SemanticActionWire::SetTimeQuality { value } => Self::SetTimeQuality { value },
             SemanticActionWire::SetWeightQuality { value } => Self::SetWeightQuality { value },
             SemanticActionWire::SetFlowQuality { value } => Self::SetFlowQuality { value },
+            SemanticActionWire::SplitGroup {
+                source_group_id,
+                new_group_id,
+                partition_rule,
+                expected_morphology_revision,
+            } => Self::SplitGroup {
+                source_group_id,
+                new_group_id,
+                partition_rule,
+                expected_morphology_revision,
+            },
+            SemanticActionWire::MergeGroups {
+                group_a_id,
+                group_b_id,
+                survivor_group_id,
+                expected_morphology_revision,
+            } => Self::MergeGroups {
+                group_a_id,
+                group_b_id,
+                survivor_group_id,
+                expected_morphology_revision,
+            },
+            SemanticActionWire::SetFormationScale {
+                group_id,
+                scale,
+                expected_morphology_revision,
+            } => Self::SetFormationScale {
+                group_id,
+                scale,
+                expected_morphology_revision,
+            },
             SemanticActionWire::PlaceField {
                 field_id,
                 contributor_id,
@@ -403,6 +490,12 @@ pub enum ActionCode {
     WeightQualitySet,
     /// Semantic Flow quality changed and resolved into the raw vector.
     FlowQualitySet,
+    /// One canonical morphology group was split.
+    GroupSplit,
+    /// Two exact morphology groups were merged into their canonical survivor.
+    GroupsMerged,
+    /// One explicit formation-scale target changed.
+    FormationScaleSet,
     /// A bounded personal field was placed.
     FieldPlaced,
     /// An existing personal field was moved.
@@ -433,6 +526,20 @@ pub enum ActionCode {
     InvalidDynamicsRate,
     /// A semantic quality was non-finite or outside the normalized range.
     InvalidSemanticQuality,
+    /// The operation was prepared against an older morphology state.
+    StaleMorphology,
+    /// The requested canonical morphology group does not exist.
+    MissingGroup,
+    /// A split or merge contains a duplicate or impossible group operand.
+    InvalidGroupOperation,
+    /// The requested new or surviving group identity is not canonical.
+    NonCanonicalGroup,
+    /// The source group cannot be partitioned while conserving non-empty groups.
+    GroupCannotSplit,
+    /// The bounded scene already contains its maximum number of morphology groups.
+    GroupLimitReached,
+    /// A formation scale was non-finite or outside its explicit range.
+    InvalidFormationScale,
     /// The requested field identifier is outside the bounded scene contract.
     InvalidFieldId,
     /// A field already uses the requested identifier.
@@ -466,6 +573,8 @@ pub struct ActionReceipt {
     pub state_revision: u64,
     /// Selection revision after evaluation.
     pub selection_revision: u64,
+    /// Morphology revision after evaluation.
+    pub morphology_revision: u64,
 }
 
 /// Concise member state for the semantic DOM surface.
@@ -483,6 +592,21 @@ pub struct MemberSummary {
     pub targeted: bool,
     /// Collective steering rule currently assigned to this member.
     pub behavior: CollectiveBehavior,
+    /// Canonical morphology group containing this member.
+    pub group_id: u8,
+}
+
+/// One canonical morphology group's complete public roster and observed extent.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct GroupSummary {
+    /// Stable bounded group identifier.
+    pub group_id: u8,
+    /// Sorted conserved member identifiers.
+    pub member_ids: Vec<u16>,
+    /// Explicit app-owned formation-scale target.
+    pub formation_scale: f32,
+    /// Maximum observed member distance from the current group centroid.
+    pub formation_extent: f32,
 }
 
 /// Count of members currently assigned to each collective steering rule.
@@ -546,6 +670,10 @@ pub struct PublicState {
     pub semantic_qualities: SemanticQualities,
     /// Complete effective vector consumed by deterministic stepping.
     pub resolved_dynamics: ResolvedDynamics,
+    /// Canonical morphology groups in stable identifier order.
+    pub groups: Vec<GroupSummary>,
+    /// Monotonic revision fencing split, merge, and rescale operations.
+    pub morphology_revision: u64,
     /// Active additive personal fields in stable identifier order.
     pub fields: Vec<FieldSummary>,
     /// Number of app-local synthetic contributor channels currently represented.

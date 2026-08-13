@@ -2,9 +2,10 @@
 
 use combinatorial_swarmability_demo_core::{
     ActionCode, CollectiveBehavior, DemoCore, DynamicsControlMode, FieldLifetime, FieldPolarity,
-    SemanticAction, TargetScope, DEFAULT_DYNAMICS_RATES, DEFAULT_SEMANTIC_QUALITIES,
-    FRAME_ROW_WIDTH, MAX_DYNAMICS_RATE, MAX_FIELD_LIFETIME_STEPS, MAX_PERSONAL_FIELDS,
-    MAX_SEMANTIC_QUALITY, MEMBER_COUNT,
+    GroupPartitionRule, PublicState, SemanticAction, TargetScope, DEFAULT_DYNAMICS_RATES,
+    DEFAULT_FORMATION_SCALE, DEFAULT_SEMANTIC_QUALITIES, FRAME_ROW_WIDTH, MAX_DYNAMICS_RATE,
+    MAX_FIELD_LIFETIME_STEPS, MAX_FORMATION_SCALE, MAX_GROUPS, MAX_PERSONAL_FIELDS,
+    MAX_SEMANTIC_QUALITY, MEMBER_COUNT, MIN_FORMATION_SCALE,
 };
 use sha2::{Digest, Sha256};
 
@@ -66,6 +67,37 @@ fn set_weight(value: f32) -> SemanticAction {
 
 fn set_flow(value: f32) -> SemanticAction {
     SemanticAction::SetFlowQuality { value }
+}
+
+fn split_group(source_group_id: u8, new_group_id: u8, revision: u64) -> SemanticAction {
+    SemanticAction::SplitGroup {
+        source_group_id,
+        new_group_id,
+        partition_rule: GroupPartitionRule::AlternatingMemberId,
+        expected_morphology_revision: revision,
+    }
+}
+
+fn merge_groups(
+    first_group_id: u8,
+    second_group_id: u8,
+    survivor_group_id: u8,
+    revision: u64,
+) -> SemanticAction {
+    SemanticAction::MergeGroups {
+        group_a_id: first_group_id,
+        group_b_id: second_group_id,
+        survivor_group_id,
+        expected_morphology_revision: revision,
+    }
+}
+
+fn set_formation_scale(group_id: u8, scale: f32, revision: u64) -> SemanticAction {
+    SemanticAction::SetFormationScale {
+        group_id,
+        scale,
+        expected_morphology_revision: revision,
+    }
 }
 
 fn run_steps(core: &mut DemoCore, batches: usize) {
@@ -208,6 +240,7 @@ fn pause_step_reset_and_seeded_restart_are_deterministic() {
     let fresh_value: serde_json::Value = serde_json::from_str(&fresh).expect("valid JSON");
     restarted_value["state_revision"] = fresh_value["state_revision"].clone();
     restarted_value["selection_revision"] = fresh_value["selection_revision"].clone();
+    restarted_value["morphology_revision"] = fresh_value["morphology_revision"].clone();
     assert_eq!(restarted_value, fresh_value);
 }
 
@@ -1005,6 +1038,292 @@ fn semantic_profiles_change_same_seed_distribution_speed_spacing_and_polarizatio
 }
 
 #[test]
+#[allow(clippy::float_cmp)] // Canonical serialized scale values are exact public contracts.
+fn morphology_split_merge_and_identity_are_canonical_and_conservative() {
+    let mut core = DemoCore::new(2_021);
+    let initial = core.public_state();
+    assert_eq!(initial.morphology_revision, 0);
+    assert_eq!(initial.groups.len(), 1);
+    assert_eq!(initial.groups[0].group_id, 0);
+    assert_eq!(
+        initial.groups[0].member_ids,
+        (0..member_count_u16()).collect::<Vec<_>>()
+    );
+    assert_eq!(initial.groups[0].formation_scale, DEFAULT_FORMATION_SCALE);
+
+    let first = core.dispatch(split_group(0, 1, 0));
+    assert!(first.accepted);
+    assert_eq!(first.code, ActionCode::GroupSplit);
+    assert_eq!(first.morphology_revision, 1);
+    let split = core.public_state();
+    assert_eq!(
+        split.groups[0].member_ids,
+        (0..member_count_u16()).step_by(2).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        split.groups[1].member_ids,
+        (1..member_count_u16()).step_by(2).collect::<Vec<_>>()
+    );
+    assert_conserved_membership(&split);
+
+    assert!(core.dispatch(set_formation_scale(0, 0.8, 1)).accepted);
+    assert!(core.dispatch(set_formation_scale(1, 1.6, 2)).accepted);
+    let before_merge = core.public_state();
+    let mut reversed_operands = core.clone();
+    let forward = core.dispatch(merge_groups(0, 1, 0, 3));
+    let reversed = reversed_operands.dispatch(merge_groups(1, 0, 0, 3));
+    assert!(forward.accepted && reversed.accepted);
+    assert_eq!(
+        core.snapshot_json().expect("snapshot serializes"),
+        reversed_operands
+            .snapshot_json()
+            .expect("snapshot serializes")
+    );
+    let merged = core.public_state();
+    assert_eq!(merged.groups.len(), 1);
+    assert_eq!(merged.groups[0].group_id, 0);
+    assert_eq!(merged.groups[0].formation_scale, 0.8);
+    assert_ne!(
+        before_merge.groups[1].formation_scale,
+        merged.groups[0].formation_scale
+    );
+    assert_conserved_membership(&merged);
+}
+
+#[test]
+fn morphology_rejects_stale_impossible_and_out_of_range_operations() {
+    let mut core = DemoCore::new(2_102);
+    let before = core.snapshot_json().expect("snapshot serializes");
+    for (action, code) in [
+        (split_group(9, 1, 0), ActionCode::MissingGroup),
+        (split_group(0, 2, 0), ActionCode::NonCanonicalGroup),
+        (merge_groups(0, 0, 0, 0), ActionCode::InvalidGroupOperation),
+        (merge_groups(0, 1, 0, 0), ActionCode::MissingGroup),
+        (
+            set_formation_scale(0, MIN_FORMATION_SCALE - 0.01, 0),
+            ActionCode::InvalidFormationScale,
+        ),
+        (
+            set_formation_scale(0, MAX_FORMATION_SCALE + 0.01, 0),
+            ActionCode::InvalidFormationScale,
+        ),
+        (
+            set_formation_scale(0, f32::NAN, 0),
+            ActionCode::InvalidFormationScale,
+        ),
+    ] {
+        let receipt = core.dispatch(action);
+        assert!(!receipt.accepted);
+        assert_eq!(receipt.code, code);
+        assert_eq!(before, core.snapshot_json().expect("snapshot serializes"));
+    }
+
+    assert!(core.dispatch(split_group(0, 1, 0)).accepted);
+    assert_eq!(
+        core.dispatch(set_formation_scale(0, 1.2, 0)).code,
+        ActionCode::StaleMorphology
+    );
+    assert_eq!(
+        core.dispatch(merge_groups(0, 1, 1, 1)).code,
+        ActionCode::NonCanonicalGroup
+    );
+
+    let mut singleton = DemoCore::new(2_103);
+    for new_group_id in 1..=5 {
+        let revision = singleton.public_state().morphology_revision;
+        assert!(
+            singleton
+                .dispatch(split_group(0, new_group_id, revision))
+                .accepted
+        );
+    }
+    assert_eq!(singleton.public_state().groups[0].member_ids.len(), 1);
+    let singleton_revision = singleton.public_state().morphology_revision;
+    assert_eq!(
+        singleton
+            .dispatch(split_group(0, 6, singleton_revision))
+            .code,
+        ActionCode::GroupCannotSplit
+    );
+
+    let mut bounded = DemoCore::new(2_104);
+    for new_group_id in 1..u8::try_from(MAX_GROUPS).expect("group count fits in a u8") {
+        let state = bounded.public_state();
+        let source = state
+            .groups
+            .iter()
+            .filter(|group| group.member_ids.len() >= 2)
+            .max_by_key(|group| group.member_ids.len())
+            .expect("a splittable group remains");
+        assert!(
+            bounded
+                .dispatch(split_group(
+                    source.group_id,
+                    new_group_id,
+                    state.morphology_revision,
+                ))
+                .accepted
+        );
+    }
+    assert_eq!(bounded.public_state().groups.len(), MAX_GROUPS);
+    let bounded_state = bounded.public_state();
+    assert_eq!(
+        bounded
+            .dispatch(split_group(
+                bounded_state.groups[0].group_id,
+                7,
+                bounded_state.morphology_revision,
+            ))
+            .code,
+        ActionCode::GroupLimitReached
+    );
+
+    assert!(serde_json::from_str::<SemanticAction>(
+        r#"{"type":"split_group","source_group_id":0,"new_group_id":1,"partition_rule":"alternating_member_id","expected_morphology_revision":0,"implicit_visual_group":true}"#
+    )
+    .is_err());
+}
+
+#[test]
+fn damaged_morphology_snapshots_fail_closed() {
+    let mut core = DemoCore::new(2_104);
+    assert!(core.dispatch(split_group(0, 1, 0)).accepted);
+    let snapshot = core.snapshot_json().expect("snapshot serializes");
+
+    let mut empty: serde_json::Value = serde_json::from_str(&snapshot).expect("snapshot parses");
+    empty["groups"] = serde_json::json!([]);
+    assert!(DemoCore::from_snapshot_json(&empty.to_string()).is_err());
+
+    let mut scale: serde_json::Value = serde_json::from_str(&snapshot).expect("snapshot parses");
+    scale["groups"][0]["formation_scale"] = serde_json::json!(2.1);
+    assert!(DemoCore::from_snapshot_json(&scale.to_string()).is_err());
+
+    let mut group_id: serde_json::Value = serde_json::from_str(&snapshot).expect("snapshot parses");
+    group_id["groups"][0]["group_id"] = serde_json::json!(8);
+    assert!(DemoCore::from_snapshot_json(&group_id.to_string()).is_err());
+
+    let mut duplicate: serde_json::Value =
+        serde_json::from_str(&snapshot).expect("snapshot parses");
+    duplicate["groups"][0]["member_ids"] = serde_json::json!([0, 0, 2, 4]);
+    assert!(DemoCore::from_snapshot_json(&duplicate.to_string()).is_err());
+
+    let mut missing: serde_json::Value = serde_json::from_str(&snapshot).expect("snapshot parses");
+    missing["groups"][0]["member_ids"] = serde_json::json!([0]);
+    assert!(DemoCore::from_snapshot_json(&missing.to_string()).is_err());
+}
+
+#[test]
+#[allow(clippy::float_cmp)] // Neutral raw dynamics values are exact public contracts.
+fn morphology_coexists_with_scope_fields_dynamics_checkpoint_replay_and_reset() {
+    let mut core = DemoCore::new(2_105);
+    assert!(
+        core.dispatch(SemanticAction::SetScope {
+            scope: TargetScope::Subgroup,
+        })
+        .accepted
+    );
+    assert!(
+        core.dispatch(place_field(
+            3,
+            2,
+            0.25,
+            -0.3,
+            FieldPolarity::Attract,
+            FieldLifetime::Persistent,
+        ))
+        .accepted
+    );
+    assert!(core.dispatch(set_space(0.8)).accepted);
+    assert!(core.dispatch(set_flow(0.7)).accepted);
+    let before = core.public_state();
+
+    assert!(core.dispatch(split_group(0, 1, 0)).accepted);
+    assert!(core.dispatch(set_formation_scale(1, 1.7, 1)).accepted);
+    let after = core.public_state();
+    assert_eq!(after.scope, before.scope);
+    assert_eq!(after.subgroup_members, before.subgroup_members);
+    assert_eq!(after.fields, before.fields);
+    assert_eq!(
+        after.active_contributor_count,
+        before.active_contributor_count
+    );
+    assert_eq!(after.dynamics_control_mode, before.dynamics_control_mode);
+    assert_eq!(after.semantic_qualities, before.semantic_qualities);
+    assert_eq!(after.resolved_dynamics, before.resolved_dynamics);
+    assert_eq!(after.selection_revision, before.selection_revision);
+
+    let groups_before_raw = after.groups.clone();
+    assert!(core.dispatch(set_alignment(0.35)).accepted);
+    let raw = core.public_state();
+    assert_eq!(raw.groups, groups_before_raw);
+    assert_eq!(raw.dynamics_control_mode, DynamicsControlMode::Raw);
+    assert_eq!(raw.resolved_dynamics.speed_scale, 1.0);
+
+    run_steps(&mut core, 16);
+    let checkpoint = core.snapshot_json().expect("checkpoint serializes");
+    let restored = DemoCore::from_snapshot_json(&checkpoint).expect("checkpoint restores");
+    assert_eq!(
+        checkpoint,
+        restored.snapshot_json().expect("snapshot serializes")
+    );
+    let replay = core.replay_json().expect("replay serializes");
+    let replayed = DemoCore::from_replay_json(&replay).expect("replay reconstructs");
+    assert_eq!(
+        checkpoint,
+        replayed.snapshot_json().expect("snapshot serializes")
+    );
+
+    let revision_before_reset = core.public_state().morphology_revision;
+    assert!(core.dispatch(SemanticAction::Reset).accepted);
+    let reset = core.public_state();
+    assert_eq!(reset.groups.len(), 1);
+    assert_eq!(reset.groups[0].member_ids.len(), MEMBER_COUNT);
+    assert_eq!(reset.groups[0].formation_scale, DEFAULT_FORMATION_SCALE);
+    assert_eq!(reset.morphology_revision, revision_before_reset + 1);
+}
+
+#[test]
+fn formation_scale_changes_same_seed_extent_without_rewriting_dynamics() {
+    let mut compact = DemoCore::new(2_106);
+    let mut expanded = DemoCore::new(2_106);
+    for core in [&mut compact, &mut expanded] {
+        assert!(core.dispatch(split_group(0, 1, 0)).accepted);
+        assert!(core.dispatch(set_time(0.7)).accepted);
+    }
+    let compact_dynamics = compact.public_state().resolved_dynamics;
+    let expanded_dynamics = expanded.public_state().resolved_dynamics;
+    assert!(
+        compact
+            .dispatch(set_formation_scale(0, MIN_FORMATION_SCALE, 1))
+            .accepted
+    );
+    assert!(
+        expanded
+            .dispatch(set_formation_scale(0, MAX_FORMATION_SCALE, 1))
+            .accepted
+    );
+    assert_eq!(compact.public_state().resolved_dynamics, compact_dynamics);
+    assert_eq!(expanded.public_state().resolved_dynamics, expanded_dynamics);
+
+    run_steps(&mut compact, 60);
+    run_steps(&mut expanded, 60);
+    let compact_state = compact.public_state();
+    let expanded_state = expanded.public_state();
+    let extent_delta =
+        expanded_state.groups[0].formation_extent - compact_state.groups[0].formation_extent;
+    assert!(
+        extent_delta > 0.04,
+        "formation extent delta was {extent_delta}"
+    );
+    assert_ne!(
+        compact.frame_rows().unwrap(),
+        expanded.frame_rows().unwrap()
+    );
+    assert_conserved_membership(&compact_state);
+    assert_conserved_membership(&expanded_state);
+}
+
+#[test]
 fn matter_payload_and_frame_rows_preserve_scene_identity() {
     let core = DemoCore::new(5);
     let payload = core.render_payload().expect("Matter payload validates");
@@ -1044,6 +1363,31 @@ fn mean_pair_distance(rows: &[f32]) -> f32 {
         }
     }
     total / f32::from(pairs)
+}
+
+fn assert_conserved_membership(state: &PublicState) {
+    assert!(!state.groups.is_empty());
+    assert!(state.groups.len() <= MAX_GROUPS);
+    assert!(state
+        .groups
+        .windows(2)
+        .all(|groups| groups[0].group_id < groups[1].group_id));
+
+    let mut members = Vec::with_capacity(MEMBER_COUNT);
+    for group in &state.groups {
+        assert!(!group.member_ids.is_empty());
+        assert!(group
+            .member_ids
+            .windows(2)
+            .all(|members| members[0] < members[1]));
+        members.extend_from_slice(&group.member_ids);
+    }
+    members.sort_unstable();
+    assert_eq!(members, (0..member_count_u16()).collect::<Vec<_>>());
+}
+
+fn member_count_u16() -> u16 {
+    u16::try_from(MEMBER_COUNT).expect("bounded member count fits in a u16")
 }
 
 fn centroid_x(rows: &[f32]) -> f32 {

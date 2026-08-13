@@ -21,6 +21,9 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Four native range inputs expose Space, Time, Weight, and Flow without a
   camera, pose tracker, timed gesture, or continuous pointing requirement.
   Arrow keys and deterministic replay are equivalent synthetic routes.
+- Split and merge use labelled native group selects and buttons. Formation
+  scale uses a native bounded range input plus an explicit apply button. The
+  deterministic replay tape is the equivalent route for exact repetition.
 - The member grid exposes primary and subgroup selection without requiring
   precise canvas pointing.
 - Catalogue facets are labelled native selects with one clear-filter action.
@@ -55,6 +58,10 @@ The canvas is a visual projection, not the sole interface or state authority.
   alignment, cohesion, separation, speed-scale, damping, and jitter vector are
   structured text. The native expandable inspector can be opened or closed
   without dispatching an action or changing simulation state.
+- Canonical group IDs, complete member rosters, counts, formation scales,
+  observed extents, before/after action traces, and morphology revisions are
+  structured text. Canvas group rings are supplemental rather than the only
+  membership signal.
 - The canvas has a concise text description and is never focus-required.
 - Focus indicators are explicit; forced-colors and 200% zoom layouts are
   supported.
@@ -72,6 +79,7 @@ The canvas is a visual projection, not the sole interface or state authority.
 Desktop and mobile checks cover keyboard selection/action, pointer selection,
 scope-aware collective rules, field placement/motion/polarity/lifetime,
 raw and semantic dynamics sliders, resolved-vector and mode-distribution
-consequences, inspection without state drift, focus visibility,
+consequences, split/merge/rescale controls, group rosters and metrics,
+inspection without state drift, focus visibility,
 reduced-motion state, intentional start, pause, single-step, reset/replay, and
 horizontal overflow.

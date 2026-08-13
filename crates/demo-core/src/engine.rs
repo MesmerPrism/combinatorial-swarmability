@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::action::{
     ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, DynamicsControlMode,
-    DynamicsRates, FieldLifetime, FieldPolarity, FieldSummary, MemberSummary, PublicState,
-    ResolvedDynamics, SemanticAction, SemanticQualities, TargetScope,
+    DynamicsRates, FieldLifetime, FieldPolarity, FieldSummary, GroupPartitionRule, GroupSummary,
+    MemberSummary, PublicState, ResolvedDynamics, SemanticAction, SemanticQualities, TargetScope,
 };
 use crate::replay::{
     validate_replay_tape, ReplayEvent, ReplayRecorder, ReplayTape, MAX_REPLAY_JSON_BYTES,
@@ -18,7 +18,7 @@ use crate::rng::SplitMix64;
 /// Number of members in the first public scene.
 pub const MEMBER_COUNT: usize = 24;
 /// Number of `f32` values in each Wasm frame row.
-pub const FRAME_ROW_WIDTH: usize = 11;
+pub const FRAME_ROW_WIDTH: usize = 12;
 /// Maximum number of additive personal fields retained by one scene.
 pub const MAX_PERSONAL_FIELDS: usize = 8;
 /// Maximum number of app-local synthetic contributor channels.
@@ -46,6 +46,14 @@ pub const DEFAULT_SEMANTIC_QUALITIES: SemanticQualities = SemanticQualities {
     weight: 0.5,
     flow: 0.5,
 };
+/// Maximum number of canonical app-owned morphology groups.
+pub const MAX_GROUPS: usize = 8;
+/// Minimum accepted explicit formation-scale target.
+pub const MIN_FORMATION_SCALE: f32 = 0.5;
+/// Maximum accepted explicit formation-scale target.
+pub const MAX_FORMATION_SCALE: f32 = 2.0;
+/// Neutral formation-scale target that adds no group radial steering.
+pub const DEFAULT_FORMATION_SCALE: f32 = 1.0;
 
 // App-owned qualitative interpolation endpoints. The source projection supplies
 // directions and coupled variables, not portable coefficients.
@@ -83,6 +91,15 @@ const MAX_FIELD_ID: u16 = 63;
 const FIELD_SOFTENING: f32 = 0.075;
 const FIELD_ACCELERATION_SCALE: f32 = 0.22;
 const MAX_FIELD_ACCELERATION_PER_SOURCE: f32 = 1.65;
+const FORMATION_SCALE_ACCELERATION: f32 = 0.85;
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct GroupState {
+    group_id: u8,
+    member_ids: Vec<u16>,
+    formation_scale: f32,
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -139,6 +156,7 @@ struct DemoSnapshot {
     semantic_qualities: SemanticQualities,
     resolved_dynamics: ResolvedDynamics,
     fields: Vec<FieldState>,
+    groups: Vec<GroupState>,
     scope: TargetScope,
     primary_member: Option<u16>,
     subgroup_members: Vec<u16>,
@@ -147,6 +165,7 @@ struct DemoSnapshot {
     accumulator_millis: u32,
     state_revision: u64,
     selection_revision: u64,
+    morphology_revision: u64,
 }
 
 /// Deterministic scene state and app-local semantic reducer.
@@ -267,6 +286,33 @@ impl DemoCore {
             SemanticAction::SetTimeQuality { value } => self.set_time_quality(value),
             SemanticAction::SetWeightQuality { value } => self.set_weight_quality(value),
             SemanticAction::SetFlowQuality { value } => self.set_flow_quality(value),
+            SemanticAction::SplitGroup {
+                source_group_id,
+                new_group_id,
+                partition_rule,
+                expected_morphology_revision,
+            } => self.split_group(
+                source_group_id,
+                new_group_id,
+                partition_rule,
+                expected_morphology_revision,
+            ),
+            SemanticAction::MergeGroups {
+                group_a_id,
+                group_b_id,
+                survivor_group_id,
+                expected_morphology_revision,
+            } => self.merge_groups(
+                group_a_id,
+                group_b_id,
+                survivor_group_id,
+                expected_morphology_revision,
+            ),
+            SemanticAction::SetFormationScale {
+                group_id,
+                scale,
+                expected_morphology_revision,
+            } => self.set_formation_scale(group_id, scale, expected_morphology_revision),
             SemanticAction::PlaceField {
                 field_id,
                 contributor_id,
@@ -319,6 +365,7 @@ impl DemoCore {
 
     /// Returns the current semantic state for ordinary DOM presentation.
     #[must_use]
+    #[allow(clippy::too_many_lines)] // One projection keeps the public state internally consistent.
     pub fn public_state(&self) -> PublicState {
         let targets = self.resolved_targets();
         let target_set = targets.iter().copied().collect::<BTreeSet<_>>();
@@ -351,6 +398,20 @@ impl DemoCore {
                     .map(|expiry| expiry.saturating_sub(self.snapshot.tick)),
             })
             .collect();
+        let groups = self
+            .snapshot
+            .groups
+            .iter()
+            .map(|group| GroupSummary {
+                group_id: group.group_id,
+                member_ids: group.member_ids.clone(),
+                formation_scale: round_for_public(group.formation_scale),
+                formation_extent: round_for_public(group_extent(
+                    group,
+                    &self.snapshot.particles.particles,
+                )),
+            })
+            .collect();
         let mut speed_total = 0.0;
         let mut behavior_counts = BehaviorCounts {
             flock: 0,
@@ -380,6 +441,8 @@ impl DemoCore {
                     subgroup_selected: subgroup_set.contains(&member_id),
                     targeted: target_set.contains(&member_id),
                     behavior,
+                    group_id: group_id_for_member(&self.snapshot.groups, member_id)
+                        .unwrap_or_default(),
                 }
             })
             .collect();
@@ -398,6 +461,8 @@ impl DemoCore {
             dynamics_control_mode: self.snapshot.dynamics_control_mode,
             semantic_qualities: public_qualities(self.snapshot.semantic_qualities),
             resolved_dynamics: public_resolved(self.snapshot.resolved_dynamics),
+            groups,
+            morphology_revision: self.snapshot.morphology_revision,
             fields,
             active_contributor_count,
             state_revision: self.snapshot.state_revision,
@@ -451,6 +516,9 @@ impl DemoCore {
                 bool_marker(subgroup.contains(&member_id)),
                 bool_marker(targets.contains(&member_id)),
                 behavior_code(self.snapshot.behaviors[index]),
+                f32::from(
+                    group_id_for_member(&self.snapshot.groups, member_id).unwrap_or_default(),
+                ),
             ]);
         }
         Ok(rows)
@@ -719,6 +787,192 @@ impl DemoCore {
             resolve_semantic_dynamics(self.snapshot.semantic_qualities);
     }
 
+    fn split_group(
+        &mut self,
+        source_group_id: u8,
+        new_group_id: u8,
+        partition_rule: GroupPartitionRule,
+        expected_morphology_revision: u64,
+    ) -> ActionReceipt {
+        if let Some(receipt) = self.reject_stale_morphology(expected_morphology_revision) {
+            return receipt;
+        }
+        let Ok(source_index) = self
+            .snapshot
+            .groups
+            .binary_search_by_key(&source_group_id, |group| group.group_id)
+        else {
+            return self.rejected(ActionCode::MissingGroup, "The source group does not exist.");
+        };
+        if self.snapshot.groups.len() >= MAX_GROUPS {
+            return self.rejected(
+                ActionCode::GroupLimitReached,
+                "The scene already contains eight canonical groups.",
+            );
+        }
+        if self.snapshot.groups[source_index].member_ids.len() < 2 {
+            return self.rejected(
+                ActionCode::GroupCannotSplit,
+                "A singleton group cannot be split into two non-empty groups.",
+            );
+        }
+        let Some(canonical_new_id) = next_canonical_group_id(&self.snapshot.groups) else {
+            return self.rejected(
+                ActionCode::GroupLimitReached,
+                "No canonical group identifier remains available.",
+            );
+        };
+        if new_group_id != canonical_new_id {
+            return self.rejected(
+                ActionCode::NonCanonicalGroup,
+                "A split must use the smallest currently unused canonical group identifier.",
+            );
+        }
+
+        let source_members = self.snapshot.groups[source_index].member_ids.clone();
+        let (retained_members, new_members) = partition_members(&source_members, partition_rule);
+        let inherited_scale = self.snapshot.groups[source_index].formation_scale;
+        self.snapshot.groups[source_index].member_ids = retained_members;
+        let insertion = self
+            .snapshot
+            .groups
+            .binary_search_by_key(&new_group_id, |group| group.group_id)
+            .unwrap_or_else(|index| index);
+        self.snapshot.groups.insert(
+            insertion,
+            GroupState {
+                group_id: new_group_id,
+                member_ids: new_members.clone(),
+                formation_scale: inherited_scale,
+            },
+        );
+        self.bump_morphology();
+        self.accepted(
+            ActionCode::GroupSplit,
+            format!(
+                "Split group {} by alternating member ID into canonical group {}.",
+                source_group_id + 1,
+                new_group_id + 1
+            ),
+            new_members,
+        )
+    }
+
+    fn merge_groups(
+        &mut self,
+        first_group_id: u8,
+        second_group_id: u8,
+        survivor_group_id: u8,
+        expected_morphology_revision: u64,
+    ) -> ActionReceipt {
+        if let Some(receipt) = self.reject_stale_morphology(expected_morphology_revision) {
+            return receipt;
+        }
+        if first_group_id == second_group_id {
+            return self.rejected(
+                ActionCode::InvalidGroupOperation,
+                "A merge requires two distinct groups.",
+            );
+        }
+        let canonical_survivor = first_group_id.min(second_group_id);
+        if survivor_group_id != canonical_survivor {
+            return self.rejected(
+                ActionCode::NonCanonicalGroup,
+                "The lower participating group identifier must survive the merge.",
+            );
+        }
+        let absorbed_group_id = first_group_id.max(second_group_id);
+        let Ok(_) = self
+            .snapshot
+            .groups
+            .binary_search_by_key(&canonical_survivor, |group| group.group_id)
+        else {
+            return self.rejected(
+                ActionCode::MissingGroup,
+                "The survivor group does not exist.",
+            );
+        };
+        let Ok(absorbed_index) = self
+            .snapshot
+            .groups
+            .binary_search_by_key(&absorbed_group_id, |group| group.group_id)
+        else {
+            return self.rejected(
+                ActionCode::MissingGroup,
+                "The absorbed group does not exist.",
+            );
+        };
+
+        let absorbed_members = self.snapshot.groups[absorbed_index].member_ids.clone();
+        self.snapshot.groups.remove(absorbed_index);
+        let survivor_index = self
+            .snapshot
+            .groups
+            .binary_search_by_key(&canonical_survivor, |group| group.group_id)
+            .expect("validated survivor remains after removing a higher group ID");
+        self.snapshot.groups[survivor_index]
+            .member_ids
+            .extend(absorbed_members.iter().copied());
+        self.snapshot.groups[survivor_index]
+            .member_ids
+            .sort_unstable();
+        self.bump_morphology();
+        self.accepted(
+            ActionCode::GroupsMerged,
+            format!(
+                "Merged groups {} and {}; canonical group {} retained its scale target.",
+                first_group_id + 1,
+                second_group_id + 1,
+                canonical_survivor + 1
+            ),
+            absorbed_members,
+        )
+    }
+
+    #[allow(clippy::float_cmp)] // Exact equality makes repeated canonical scale actions idempotent.
+    fn set_formation_scale(
+        &mut self,
+        group_id: u8,
+        scale: f32,
+        expected_morphology_revision: u64,
+    ) -> ActionReceipt {
+        if let Some(receipt) = self.reject_stale_morphology(expected_morphology_revision) {
+            return receipt;
+        }
+        if !valid_formation_scale(scale) {
+            return self.rejected(
+                ActionCode::InvalidFormationScale,
+                "Formation scale must be finite and between 0.50 and 2.00.",
+            );
+        }
+        let Ok(index) = self
+            .snapshot
+            .groups
+            .binary_search_by_key(&group_id, |group| group.group_id)
+        else {
+            return self.rejected(ActionCode::MissingGroup, "That group does not exist.");
+        };
+        let members = self.snapshot.groups[index].member_ids.clone();
+        if self.snapshot.groups[index].formation_scale != scale {
+            self.snapshot.groups[index].formation_scale = scale;
+            self.bump_morphology();
+        }
+        self.accepted(
+            ActionCode::FormationScaleSet,
+            format!("Set group {} formation scale to {scale:.2}.", group_id + 1),
+            members,
+        )
+    }
+
+    fn reject_stale_morphology(&self, expected_morphology_revision: u64) -> Option<ActionReceipt> {
+        (expected_morphology_revision != self.snapshot.morphology_revision).then(|| {
+            self.rejected(
+                ActionCode::StaleMorphology,
+                "Group state changed before the morphology action was applied.",
+            )
+        })
+    }
+
     fn place_field(
         &mut self,
         field_id: u16,
@@ -908,9 +1162,11 @@ impl DemoCore {
         let seed = self.snapshot.seed;
         let next_state_revision = self.snapshot.state_revision.saturating_add(1);
         let next_selection_revision = self.snapshot.selection_revision.saturating_add(1);
+        let next_morphology_revision = self.snapshot.morphology_revision.saturating_add(1);
         self.snapshot = initial_snapshot(seed);
         self.snapshot.state_revision = next_state_revision;
         self.snapshot.selection_revision = next_selection_revision;
+        self.snapshot.morphology_revision = next_morphology_revision;
         self.accepted(
             ActionCode::Reset,
             "Reset to the current seed's paused initial state.".to_owned(),
@@ -921,9 +1177,11 @@ impl DemoCore {
     fn restart_seed(&mut self, seed: u64) -> ActionReceipt {
         let next_state_revision = self.snapshot.state_revision.saturating_add(1);
         let next_selection_revision = self.snapshot.selection_revision.saturating_add(1);
+        let next_morphology_revision = self.snapshot.morphology_revision.saturating_add(1);
         self.snapshot = initial_snapshot(seed);
         self.snapshot.state_revision = next_state_revision;
         self.snapshot.selection_revision = next_selection_revision;
+        self.snapshot.morphology_revision = next_morphology_revision;
         self.accepted(
             ActionCode::SeedRestarted,
             format!("Restarted with seed {seed} in a paused state."),
@@ -931,14 +1189,18 @@ impl DemoCore {
         )
     }
 
+    #[allow(clippy::too_many_lines)] // The deterministic integration path remains singular and inspectable.
     fn step_simulation(&mut self) {
         let source = self.snapshot.particles.particles.clone();
         let fields = self.snapshot.fields.clone();
+        let groups = self.snapshot.groups.clone();
         let resolved = self.snapshot.resolved_dynamics;
         let next_tick = self.snapshot.tick.saturating_add(1);
-        let swarm_centroid = particle_centroid(&source);
         let mut next = source.clone();
         for (index, particle) in source.iter().enumerate() {
+            let morphology_group = group_for_member(&groups, member_id(index))
+                .expect("every live member belongs to exactly one validated group");
+            let morphology_centroid = group_centroid(morphology_group, &source);
             let mut neighbor_count = 0_u16;
             let mut alignment = Vec3::ZERO;
             let mut cohesion = Vec3::ZERO;
@@ -974,9 +1236,14 @@ impl DemoCore {
             }
 
             let behavior = self.snapshot.behaviors[index];
-            let (behavior_centroid, behavior_peer_count) =
-                peer_behavior_centroid(&source, &self.snapshot.behaviors, behavior, index)
-                    .unwrap_or((swarm_centroid, 1));
+            let (behavior_centroid, behavior_peer_count) = peer_behavior_centroid(
+                &source,
+                &self.snapshot.behaviors,
+                behavior,
+                index,
+                &morphology_group.member_ids,
+            )
+            .unwrap_or((morphology_centroid, 1));
             let behavior_acceleration = match behavior {
                 CollectiveBehavior::Flock => flock_acceleration,
                 CollectiveBehavior::Cohere => {
@@ -992,12 +1259,17 @@ impl DemoCore {
                     flock_acceleration * 0.52 + collective_steering * 1.7 + separation * 0.11
                 }
                 CollectiveBehavior::Disperse => {
-                    let peer_dispersion =
-                        peer_dispersion_vector(&source, &self.snapshot.behaviors, behavior, index);
+                    let peer_dispersion = peer_dispersion_vector(
+                        &source,
+                        &self.snapshot.behaviors,
+                        behavior,
+                        index,
+                        &morphology_group.member_ids,
+                    );
                     let dispersion = if peer_dispersion.length_squared() > f32::EPSILON {
                         peer_dispersion
                     } else {
-                        particle.position - swarm_centroid
+                        particle.position - morphology_centroid
                     };
                     let collective_steering = if dispersion.length_squared() > f32::EPSILON {
                         normalized_or(dispersion, particle.velocity) * target_speed
@@ -1009,8 +1281,9 @@ impl DemoCore {
                 }
             };
             let steering_response = 1.0 - resolved.damping * 0.6;
-            let controlled_acceleration =
-                behavior_acceleration + personal_field_acceleration(particle.position, &fields);
+            let controlled_acceleration = behavior_acceleration
+                + personal_field_acceleration(particle.position, &fields)
+                + formation_scale_acceleration(particle.position, morphology_group, &source);
             let jitter = deterministic_jitter(
                 self.snapshot.seed,
                 next_tick,
@@ -1094,6 +1367,11 @@ impl DemoCore {
         self.bump_state();
     }
 
+    fn bump_morphology(&mut self) {
+        self.snapshot.morphology_revision = self.snapshot.morphology_revision.saturating_add(1);
+        self.bump_state();
+    }
+
     fn accepted(
         &self,
         code: ActionCode,
@@ -1107,6 +1385,7 @@ impl DemoCore {
             changed_member_ids,
             state_revision: self.snapshot.state_revision,
             selection_revision: self.snapshot.selection_revision,
+            morphology_revision: self.snapshot.morphology_revision,
         }
     }
 
@@ -1118,6 +1397,7 @@ impl DemoCore {
             changed_member_ids: Vec::new(),
             state_revision: self.snapshot.state_revision,
             selection_revision: self.snapshot.selection_revision,
+            morphology_revision: self.snapshot.morphology_revision,
         }
     }
 }
@@ -1143,23 +1423,20 @@ const fn behavior_code(behavior: CollectiveBehavior) -> f32 {
     }
 }
 
-fn particle_centroid(particles: &[ParticleState]) -> Vec3 {
-    let sum = particles.iter().fold(Vec3::ZERO, |centroid, particle| {
-        centroid + particle.position
-    });
-    sum / MEMBER_COUNT_F32
-}
-
 fn peer_behavior_centroid(
     particles: &[ParticleState],
     behaviors: &[CollectiveBehavior],
     behavior: CollectiveBehavior,
     member_index: usize,
+    group_members: &[u16],
 ) -> Option<(Vec3, u16)> {
     let mut sum = Vec3::ZERO;
     let mut count = 0_u16;
     for (index, particle) in particles.iter().enumerate() {
-        if index != member_index && behaviors[index] == behavior {
+        if index != member_index
+            && behaviors[index] == behavior
+            && group_members.binary_search(&member_id(index)).is_ok()
+        {
             sum = sum + particle.position;
             count += 1;
         }
@@ -1172,12 +1449,17 @@ fn peer_dispersion_vector(
     behaviors: &[CollectiveBehavior],
     behavior: CollectiveBehavior,
     member_index: usize,
+    group_members: &[u16],
 ) -> Vec3 {
     let member = &particles[member_index];
     particles
         .iter()
         .enumerate()
-        .filter(|(index, _)| *index != member_index && behaviors[*index] == behavior)
+        .filter(|(index, _)| {
+            *index != member_index
+                && behaviors[*index] == behavior
+                && group_members.binary_search(&member_id(*index)).is_ok()
+        })
         .fold(Vec3::ZERO, |dispersion, (_, peer)| {
             let away = member.position - peer.position;
             let distance_squared = away.length_squared();
@@ -1187,6 +1469,75 @@ fn peer_dispersion_vector(
                 dispersion
             }
         })
+}
+
+fn group_for_member(groups: &[GroupState], member_id: u16) -> Option<&GroupState> {
+    groups
+        .iter()
+        .find(|group| group.member_ids.binary_search(&member_id).is_ok())
+}
+
+fn group_id_for_member(groups: &[GroupState], member_id: u16) -> Option<u8> {
+    group_for_member(groups, member_id).map(|group| group.group_id)
+}
+
+fn group_centroid(group: &GroupState, particles: &[ParticleState]) -> Vec3 {
+    let sum = group
+        .member_ids
+        .iter()
+        .fold(Vec3::ZERO, |centroid, member| {
+            centroid + particles[usize::from(*member)].position
+        });
+    sum / f32::from(u16::try_from(group.member_ids.len()).unwrap_or(1))
+}
+
+fn group_extent(group: &GroupState, particles: &[ParticleState]) -> f32 {
+    let centroid = group_centroid(group, particles);
+    group
+        .member_ids
+        .iter()
+        .map(|member| (particles[usize::from(*member)].position - centroid).length())
+        .fold(0.0, f32::max)
+}
+
+fn formation_scale_acceleration(
+    position: Vec3,
+    group: &GroupState,
+    particles: &[ParticleState],
+) -> Vec3 {
+    let scale_offset = group.formation_scale - DEFAULT_FORMATION_SCALE;
+    if scale_offset.abs() <= f32::EPSILON || group.member_ids.len() < 2 {
+        return Vec3::ZERO;
+    }
+    let radial = position - group_centroid(group, particles);
+    if radial.length_squared() <= f32::EPSILON {
+        return Vec3::ZERO;
+    }
+    normalized_or(radial, Vec3::ZERO) * scale_offset * FORMATION_SCALE_ACCELERATION
+}
+
+fn next_canonical_group_id(groups: &[GroupState]) -> Option<u8> {
+    (0..u8::try_from(MAX_GROUPS).unwrap_or_default())
+        .find(|candidate| groups.iter().all(|group| group.group_id != *candidate))
+}
+
+fn partition_members(
+    member_ids: &[u16],
+    partition_rule: GroupPartitionRule,
+) -> (Vec<u16>, Vec<u16>) {
+    match partition_rule {
+        GroupPartitionRule::AlternatingMemberId => member_ids.iter().copied().enumerate().fold(
+            (Vec::new(), Vec::new()),
+            |mut partition, (index, member)| {
+                if index % 2 == 0 {
+                    partition.0.push(member);
+                } else {
+                    partition.1.push(member);
+                }
+                partition
+            },
+        ),
+    }
 }
 
 fn personal_field_acceleration(position: Vec3, fields: &[FieldState]) -> Vec3 {
@@ -1363,6 +1714,11 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
         semantic_qualities: DEFAULT_SEMANTIC_QUALITIES,
         resolved_dynamics: resolve_raw_dynamics(DEFAULT_DYNAMICS_RATES),
         fields: Vec::new(),
+        groups: vec![GroupState {
+            group_id: 0,
+            member_ids: (0..MEMBER_COUNT).map(member_id).collect(),
+            formation_scale: DEFAULT_FORMATION_SCALE,
+        }],
         scope: TargetScope::Member,
         primary_member: Some(0),
         subgroup_members: (0..DEFAULT_SUBGROUP_COUNT).map(member_id).collect(),
@@ -1371,6 +1727,7 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
         accumulator_millis: 0,
         state_revision: 0,
         selection_revision: 0,
+        morphology_revision: 0,
     }
 }
 
@@ -1395,6 +1752,7 @@ fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
             "unexpected collective-behavior count",
         ));
     }
+    validate_snapshot_groups(snapshot)?;
     validate_snapshot_dynamics(snapshot)?;
     if snapshot.fields.len() > MAX_PERSONAL_FIELDS {
         return Err(DemoError::InvalidSnapshot("too many personal fields"));
@@ -1454,6 +1812,49 @@ fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
     Ok(())
 }
 
+fn validate_snapshot_groups(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
+    if snapshot.groups.is_empty() || snapshot.groups.len() > MAX_GROUPS {
+        return Err(DemoError::InvalidSnapshot("invalid morphology group count"));
+    }
+    let mut previous_group_id = None;
+    let mut all_members = BTreeSet::new();
+    for group in &snapshot.groups {
+        if usize::from(group.group_id) >= MAX_GROUPS
+            || previous_group_id.is_some_and(|previous| previous >= group.group_id)
+        {
+            return Err(DemoError::InvalidSnapshot(
+                "morphology groups must have sorted unique canonical IDs",
+            ));
+        }
+        if group.member_ids.is_empty() || !valid_formation_scale(group.formation_scale) {
+            return Err(DemoError::InvalidSnapshot(
+                "morphology group roster or scale is invalid",
+            ));
+        }
+        let mut normalized = group.member_ids.clone();
+        normalized.sort_unstable();
+        normalized.dedup();
+        if normalized != group.member_ids
+            || group
+                .member_ids
+                .iter()
+                .copied()
+                .any(|member| !valid_member(member) || !all_members.insert(member))
+        {
+            return Err(DemoError::InvalidSnapshot(
+                "morphology membership must be sorted, unique, and conserved",
+            ));
+        }
+        previous_group_id = Some(group.group_id);
+    }
+    if all_members.len() != MEMBER_COUNT {
+        return Err(DemoError::InvalidSnapshot(
+            "every member must belong to exactly one morphology group",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_snapshot_dynamics(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
     if !valid_dynamics_rate(snapshot.raw_dynamics_rates.alignment)
         || !valid_dynamics_rate(snapshot.raw_dynamics_rates.cohesion)
@@ -1502,6 +1903,10 @@ fn integrate_particle(
 
 fn valid_member(member_id: u16) -> bool {
     usize::from(member_id) < MEMBER_COUNT
+}
+
+fn valid_formation_scale(scale: f32) -> bool {
+    scale.is_finite() && (MIN_FORMATION_SCALE..=MAX_FORMATION_SCALE).contains(&scale)
 }
 
 fn normalized_or(value: Vec3, fallback: Vec3) -> Vec3 {
