@@ -1,7 +1,7 @@
 //! Thin bounded WebAssembly adapter over `demo-core`.
 
 use combinatorial_swarmability_demo_core::{
-    DemoCore, SemanticAction, FRAME_ROW_WIDTH, MEMBER_COUNT,
+    ComparisonRunner, DemoCore, SemanticAction, FRAME_ROW_WIDTH, MEMBER_COUNT,
 };
 use wasm_bindgen::prelude::*;
 
@@ -9,6 +9,12 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub struct DemoEngine {
     core: DemoCore,
+}
+
+/// Browser-facing owner of two isolated deterministic comparison lanes.
+#[wasm_bindgen]
+pub struct ComparisonEngine {
+    runner: ComparisonRunner,
 }
 
 #[wasm_bindgen]
@@ -104,6 +110,93 @@ impl DemoEngine {
     #[must_use]
     pub fn frame_row_width() -> usize {
         FRAME_ROW_WIDTH
+    }
+}
+
+#[wasm_bindgen]
+impl ComparisonEngine {
+    /// Creates a comparison runner from one strict immutable specification.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized error for damaged schemas, seeds, or tape bindings.
+    #[wasm_bindgen(constructor)]
+    pub fn new(spec_json: &str) -> Result<Self, JsValue> {
+        let runner = ComparisonRunner::from_spec_json(spec_json)
+            .map_err(|_| JsValue::from_str("Invalid comparison specification."))?;
+        Ok(Self { runner })
+    }
+
+    /// Applies one canonical normalized-input event to both lanes transactionally.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized error if a lane or lockstep invariant fails.
+    pub fn step_event_json(&mut self) -> Result<String, JsValue> {
+        self.runner
+            .step_event_json()
+            .map_err(|_| JsValue::from_str("Comparison step was rejected."))
+    }
+
+    /// Restores both isolated lanes to the canonical initial snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized error if canonical start equality cannot be restored.
+    pub fn reset(&mut self) -> Result<(), JsValue> {
+        self.runner
+            .reset()
+            .map_err(|_| JsValue::from_str("Comparison reset was rejected."))
+    }
+
+    /// Resets and replays the complete immutable normalized-input tape.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized error if either lane or lockstep invariant fails.
+    pub fn replay_all_json(&mut self) -> Result<String, JsValue> {
+        self.runner
+            .replay_all_json()
+            .map_err(|_| JsValue::from_str("Comparison replay was rejected."))
+    }
+
+    /// Returns the current versioned comparison result and provenance.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized error when the result cannot be projected.
+    pub fn result_json(&self) -> Result<String, JsValue> {
+        self.runner
+            .result_json()
+            .map_err(|_| JsValue::from_str("Comparison result is unavailable."))
+    }
+
+    /// Returns current renderer-neutral rows for the left isolated lane.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized error when the lane frame cannot be projected.
+    pub fn left_frame_rows(&self) -> Result<Vec<f32>, JsValue> {
+        self.runner
+            .left_frame_rows()
+            .map_err(|_| JsValue::from_str("Left comparison frame is unavailable."))
+    }
+
+    /// Returns current renderer-neutral rows for the right isolated lane.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized error when the lane frame cannot be projected.
+    pub fn right_frame_rows(&self) -> Result<Vec<f32>, JsValue> {
+        self.runner
+            .right_frame_rows()
+            .map_err(|_| JsValue::from_str("Right comparison frame is unavailable."))
+    }
+
+    /// Returns the bounded event count for the selected canonical tape.
+    #[must_use]
+    pub fn event_count(&self) -> usize {
+        self.runner.event_count()
     }
 }
 

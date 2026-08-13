@@ -306,6 +306,7 @@ impl DemoCore {
             SemanticAction::SetTimeQuality { value } => self.set_time_quality(value),
             SemanticAction::SetWeightQuality { value } => self.set_weight_quality(value),
             SemanticAction::SetFlowQuality { value } => self.set_flow_quality(value),
+            SemanticAction::ApplyComparisonRawMirror => self.apply_comparison_raw_mirror(),
             SemanticAction::SplitGroup {
                 source_group_id,
                 new_group_id,
@@ -858,6 +859,19 @@ impl DemoCore {
         self.accepted(
             ActionCode::FlowQualitySet,
             format!("Set Flow to {value:.2} and resolved the semantic dynamics vector."),
+            Vec::new(),
+        )
+    }
+
+    fn apply_comparison_raw_mirror(&mut self) -> ActionReceipt {
+        let resolved = resolve_semantic_dynamics(DEFAULT_SEMANTIC_QUALITIES);
+        self.snapshot.raw_dynamics_rates = resolved.rates;
+        self.snapshot.dynamics_control_mode = DynamicsControlMode::ComparisonRawMirror;
+        self.snapshot.resolved_dynamics = resolved;
+        self.bump_state();
+        self.accepted(
+            ActionCode::ComparisonRawMirrorApplied,
+            "Installed the fixed raw-vector mirror of the semantic midpoint profile.".to_owned(),
             Vec::new(),
         )
     }
@@ -2316,6 +2330,15 @@ fn validate_snapshot_dynamics(snapshot: &DemoSnapshot) -> Result<(), DemoError> 
     let expected_resolved = match snapshot.dynamics_control_mode {
         DynamicsControlMode::Raw => resolve_raw_dynamics(snapshot.raw_dynamics_rates),
         DynamicsControlMode::Semantic => resolve_semantic_dynamics(snapshot.semantic_qualities),
+        DynamicsControlMode::ComparisonRawMirror => {
+            let expected = resolve_semantic_dynamics(DEFAULT_SEMANTIC_QUALITIES);
+            if snapshot.raw_dynamics_rates != expected.rates {
+                return Err(DemoError::InvalidSnapshot(
+                    "comparison raw mirror rates do not match the fixed profile",
+                ));
+            }
+            expected
+        }
     };
     if snapshot.resolved_dynamics != expected_resolved {
         return Err(DemoError::InvalidSnapshot(

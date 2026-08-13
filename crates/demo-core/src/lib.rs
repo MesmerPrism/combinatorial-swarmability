@@ -1,6 +1,7 @@
 //! Deterministic simulation and semantic-action core for the browser demo.
 
 mod action;
+mod comparison;
 mod engine;
 mod replay;
 mod rng;
@@ -11,6 +12,7 @@ pub use action::{
     HandoffDecision, LeaseSummary, MemberSummary, PublicState, ResolvedDynamics, SemanticAction,
     SemanticQualities, TargetScope,
 };
+pub use comparison::{ComparisonError, ComparisonRunner};
 pub use engine::{
     DemoCore, DemoError, DEFAULT_DYNAMICS_RATES, DEFAULT_FORMATION_SCALE,
     DEFAULT_SEMANTIC_QUALITIES, FRAME_ROW_WIDTH, MAX_ACTIVE_LEASES, MAX_DYNAMICS_RATE,

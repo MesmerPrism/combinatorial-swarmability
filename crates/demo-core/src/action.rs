@@ -65,6 +65,8 @@ pub enum DynamicsControlMode {
     Raw,
     /// Space, Time, Weight, and Flow compile into the effective vector.
     Semantic,
+    /// One fixed comparison-only raw vector that mirrors the semantic midpoint exactly.
+    ComparisonRawMirror,
 }
 
 /// Bounded semantic movement-quality values.
@@ -207,6 +209,11 @@ pub enum SemanticAction {
         /// Bound (0) to Free (1).
         value: f32,
     },
+    /// Install the one fixed raw-vector mirror used to prove comparison equivalence.
+    ///
+    /// This is deliberately not generic parameter plumbing: the profile has no
+    /// caller-supplied coefficients and is available only as atlas infrastructure.
+    ApplyComparisonRawMirror,
     /// Split one canonical morphology group by an explicit deterministic rule.
     SplitGroup {
         /// Existing source group whose identity and scale target remain in place.
@@ -384,6 +391,7 @@ enum SemanticActionWire {
     SetFlowQuality {
         value: f32,
     },
+    ApplyComparisonRawMirror {},
     SplitGroup {
         source_group_id: u8,
         new_group_id: u8,
@@ -493,6 +501,7 @@ impl<'de> Deserialize<'de> for SemanticAction {
             SemanticActionWire::SetTimeQuality { value } => Self::SetTimeQuality { value },
             SemanticActionWire::SetWeightQuality { value } => Self::SetWeightQuality { value },
             SemanticActionWire::SetFlowQuality { value } => Self::SetFlowQuality { value },
+            SemanticActionWire::ApplyComparisonRawMirror {} => Self::ApplyComparisonRawMirror,
             SemanticActionWire::SplitGroup {
                 source_group_id,
                 new_group_id,
@@ -636,6 +645,8 @@ pub enum ActionCode {
     WeightQualitySet,
     /// Semantic Flow quality changed and resolved into the raw vector.
     FlowQualitySet,
+    /// The comparison-only explicit raw vector was installed.
+    ComparisonRawMirrorApplied,
     /// One canonical morphology group was split.
     GroupSplit,
     /// Two exact morphology groups were merged into their canonical survivor.
