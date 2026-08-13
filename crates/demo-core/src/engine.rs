@@ -6,8 +6,8 @@ use rusty_matter_particles::{ParticleRenderPayload, ParticleSet, ParticleState};
 use serde::{Deserialize, Serialize};
 
 use crate::action::{
-    ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, FieldLifetime, FieldPolarity,
-    FieldSummary, MemberSummary, PublicState, SemanticAction, TargetScope,
+    ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, DynamicsRates, FieldLifetime,
+    FieldPolarity, FieldSummary, MemberSummary, PublicState, SemanticAction, TargetScope,
 };
 use crate::replay::{
     validate_replay_tape, ReplayEvent, ReplayRecorder, ReplayTape, MAX_REPLAY_JSON_BYTES,
@@ -24,6 +24,16 @@ pub const MAX_PERSONAL_FIELDS: usize = 8;
 pub const MAX_SYNTHETIC_CONTRIBUTORS: u8 = 4;
 /// Maximum expiring-field lifetime in fixed simulation steps.
 pub const MAX_FIELD_LIFETIME_STEPS: u32 = 1_200;
+/// Minimum accepted app-owned collective-mode entry rate.
+pub const MIN_DYNAMICS_RATE: f32 = 0.0;
+/// Maximum accepted app-owned collective-mode entry rate.
+pub const MAX_DYNAMICS_RATE: f32 = 1.0;
+/// Disabled-by-default raw dynamics rates, preserving the established scene.
+pub const DEFAULT_DYNAMICS_RATES: DynamicsRates = DynamicsRates {
+    alignment: 0.0,
+    cohesion: 0.0,
+    separation: 0.0,
+};
 
 const DEFAULT_SUBGROUP_COUNT: usize = 6;
 const MEMBER_COUNT_F32: f32 = 24.0;
@@ -95,6 +105,7 @@ struct DemoSnapshot {
     particles: ParticleSet,
     speed_offsets: Vec<f32>,
     behaviors: Vec<CollectiveBehavior>,
+    dynamics_rates: DynamicsRates,
     fields: Vec<FieldState>,
     scope: TargetScope,
     primary_member: Option<u16>,
@@ -217,6 +228,9 @@ impl DemoCore {
                 behavior,
                 expected_selection_revision,
             } => self.set_behavior(behavior, expected_selection_revision),
+            SemanticAction::SetAlignment { rate } => self.set_alignment(rate),
+            SemanticAction::SetCohesion { rate } => self.set_cohesion(rate),
+            SemanticAction::SetSeparation { rate } => self.set_separation(rate),
             SemanticAction::PlaceField {
                 field_id,
                 contributor_id,
@@ -343,6 +357,11 @@ impl DemoCore {
             target_members: targets,
             average_speed: round_for_public(speed_total / MEMBER_COUNT_F32),
             behavior_counts,
+            dynamics_rates: DynamicsRates {
+                alignment: round_for_public(self.snapshot.dynamics_rates.alignment),
+                cohesion: round_for_public(self.snapshot.dynamics_rates.cohesion),
+                separation: round_for_public(self.snapshot.dynamics_rates.separation),
+            },
             fields,
             active_contributor_count,
             state_revision: self.snapshot.state_revision,
@@ -531,6 +550,54 @@ impl DemoCore {
                 targets.len()
             ),
             targets,
+        )
+    }
+
+    fn set_alignment(&mut self, rate: f32) -> ActionReceipt {
+        if !valid_dynamics_rate(rate) {
+            return self.rejected(
+                ActionCode::InvalidDynamicsRate,
+                "Alignment rate must be finite and between 0 and 1 transition per member-second.",
+            );
+        }
+        self.snapshot.dynamics_rates.alignment = rate;
+        self.bump_state();
+        self.accepted(
+            ActionCode::AlignmentSet,
+            format!("Set the swarm-wide alignment-mode entry rate to {rate:.2}."),
+            Vec::new(),
+        )
+    }
+
+    fn set_cohesion(&mut self, rate: f32) -> ActionReceipt {
+        if !valid_dynamics_rate(rate) {
+            return self.rejected(
+                ActionCode::InvalidDynamicsRate,
+                "Cohesion rate must be finite and between 0 and 1 transition per member-second.",
+            );
+        }
+        self.snapshot.dynamics_rates.cohesion = rate;
+        self.bump_state();
+        self.accepted(
+            ActionCode::CohesionSet,
+            format!("Set the swarm-wide cohesion-mode entry rate to {rate:.2}."),
+            Vec::new(),
+        )
+    }
+
+    fn set_separation(&mut self, rate: f32) -> ActionReceipt {
+        if !valid_dynamics_rate(rate) {
+            return self.rejected(
+                ActionCode::InvalidDynamicsRate,
+                "Separation rate must be finite and between 0 and 1 transition per member-second.",
+            );
+        }
+        self.snapshot.dynamics_rates.separation = rate;
+        self.bump_state();
+        self.accepted(
+            ActionCode::SeparationSet,
+            format!("Set the swarm-wide separation-mode entry rate to {rate:.2}."),
+            Vec::new(),
         )
     }
 
@@ -836,7 +903,9 @@ impl DemoCore {
             next[index].velocity = velocity;
             next[index].age_seconds = particle.age_seconds + FIXED_STEP_SECONDS;
         }
-        self.snapshot.tick = self.snapshot.tick.saturating_add(1);
+        let next_tick = self.snapshot.tick.saturating_add(1);
+        self.apply_dynamics_transitions(next_tick);
+        self.snapshot.tick = next_tick;
         let tick = self.snapshot.tick;
         self.snapshot
             .fields
@@ -844,6 +913,30 @@ impl DemoCore {
         self.snapshot.particles.particles = next;
         self.snapshot.particles.time_seconds += FIXED_STEP_SECONDS;
         self.bump_state();
+    }
+
+    fn apply_dynamics_transitions(&mut self, tick: u64) {
+        let rates = self.snapshot.dynamics_rates;
+        let total_rate = rates.alignment + rates.cohesion + rates.separation;
+        if total_rate <= f32::EPSILON {
+            return;
+        }
+        let transition_probability = total_rate * FIXED_STEP_SECONDS;
+        for (index, behavior) in self.snapshot.behaviors.iter_mut().enumerate() {
+            let member = u64::try_from(index).unwrap_or_default();
+            let event_draw = deterministic_unit(self.snapshot.seed, tick, member, 0);
+            if event_draw >= transition_probability {
+                continue;
+            }
+            let mode_draw = deterministic_unit(self.snapshot.seed, tick, member, 1) * total_rate;
+            *behavior = if mode_draw < rates.alignment {
+                CollectiveBehavior::Flock
+            } else if mode_draw < rates.alignment + rates.cohesion {
+                CollectiveBehavior::Cohere
+            } else {
+                CollectiveBehavior::Disperse
+            };
+        }
     }
 
     fn replay_steps(&mut self, steps: u64) -> Result<(), DemoError> {
@@ -1003,6 +1096,22 @@ fn valid_field_position(x: f32, y: f32) -> bool {
         && y.abs() <= FIELD_POSITION_LIMIT
 }
 
+fn valid_dynamics_rate(rate: f32) -> bool {
+    rate.is_finite() && (MIN_DYNAMICS_RATE..=MAX_DYNAMICS_RATE).contains(&rate)
+}
+
+fn deterministic_unit(seed: u64, tick: u64, member: u64, stream: u64) -> f32 {
+    let mut value = seed
+        ^ tick.wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        ^ member.wrapping_mul(0xbf58_476d_1ce4_e5b9)
+        ^ stream.wrapping_mul(0x94d0_49bb_1331_11eb);
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^= value >> 31;
+    let bits = u16::try_from(value >> 48).unwrap_or_default();
+    f32::from(bits) / (f32::from(u16::MAX) + 1.0)
+}
+
 fn initial_snapshot(seed: u64) -> DemoSnapshot {
     let mut rng = SplitMix64::new(seed);
     let mut particles =
@@ -1030,6 +1139,7 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
         particles,
         speed_offsets: vec![0.0; MEMBER_COUNT],
         behaviors: vec![CollectiveBehavior::Flock; MEMBER_COUNT],
+        dynamics_rates: DEFAULT_DYNAMICS_RATES,
         fields: Vec::new(),
         scope: TargetScope::Member,
         primary_member: Some(0),
@@ -1061,6 +1171,14 @@ fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
     if snapshot.behaviors.len() != MEMBER_COUNT {
         return Err(DemoError::InvalidSnapshot(
             "unexpected collective-behavior count",
+        ));
+    }
+    if !valid_dynamics_rate(snapshot.dynamics_rates.alignment)
+        || !valid_dynamics_rate(snapshot.dynamics_rates.cohesion)
+        || !valid_dynamics_rate(snapshot.dynamics_rates.separation)
+    {
+        return Err(DemoError::InvalidSnapshot(
+            "raw dynamics rate is outside the accepted range",
         ));
     }
     if snapshot.fields.len() > MAX_PERSONAL_FIELDS {

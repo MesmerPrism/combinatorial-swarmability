@@ -26,7 +26,9 @@ $requiredIds = @(
     'metric-fields', 'field-state-list', 'field-contributor', 'field-polarity',
     'field-lifetime', 'field-x', 'field-y', 'field-select',
     'place-field-button', 'move-field-button', 'polarity-field-button',
-    'remove-field-button'
+    'remove-field-button', 'state-dynamics-rates', 'metric-distribution',
+    'dynamics-alignment', 'dynamics-alignment-value', 'dynamics-cohesion',
+    'dynamics-cohesion-value', 'dynamics-separation', 'dynamics-separation-value'
 )
 foreach ($id in $requiredIds) {
     if ($html -notmatch "id=[`"']$([regex]::Escape($id))[`"']") {
@@ -58,7 +60,8 @@ foreach ($functionName in @(
     'updateActionTrace', 'outcomeMetrics', 'saveCheckpoint',
     'retrieveCheckpoint', 'replayCurrentRun', 'renderSessionHistory',
     'placePersonalField', 'moveSelectedField', 'setSelectedFieldPolarity',
-    'removeSelectedField', 'renderFieldStateList', 'drawPersonalFields'
+    'removeSelectedField', 'renderFieldStateList', 'drawPersonalFields',
+    'bindDynamicsSlider', 'updateDynamicsControls', 'updateDynamicsOutput'
 )) {
     if ($script -notmatch "function\s+$functionName\s*\(") {
         throw "Atlas adapter is missing $functionName."
@@ -86,6 +89,20 @@ foreach ($fieldAction in @('place_field', 'move_field', 'set_field_polarity', 'r
         throw "The accessible field adapter is missing semantic action: $fieldAction"
     }
 }
+foreach ($dynamicsAction in @('set_alignment', 'set_cohesion', 'set_separation')) {
+    if ($script -notmatch [regex]::Escape($dynamicsAction)) {
+        throw "The accessible raw dynamics adapter is missing semantic action: $dynamicsAction"
+    }
+}
+if ($script -match 'set_randomness') {
+    throw 'Raw dynamics must not expose an arbitrary randomness parameter.'
+}
+foreach ($parameter in @('alignment', 'cohesion', 'separation')) {
+    $pattern = "id=[`"']dynamics-$parameter[`"'][^>]*min=[`"']0[`"'][^>]*max=[`"']1[`"'][^>]*step=[`"']0\.05[`"'][^>]*value=[`"']0[`"']"
+    if ($html -notmatch $pattern) {
+        throw "Raw dynamics slider $parameter must preserve the accepted range, step, and default."
+    }
+}
 if ($script -notmatch 'event instanceof PointerEvent && event\.detail > 0') {
     throw 'The input adapter must distinguish keyboard-generated PointerEvent clicks from physical pointer input.'
 }
@@ -110,4 +127,4 @@ foreach ($item in @($catalog.items)) {
     }
 }
 
-Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, and three bound reconstructions.'
+Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, three bound reconstructions, and bounded raw dynamics controls.'

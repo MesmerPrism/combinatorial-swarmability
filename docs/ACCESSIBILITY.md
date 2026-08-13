@@ -15,6 +15,9 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Native range inputs, selects, and buttons provide a synthetic equivalent for
   placing, moving, changing polarity, and removing personal fields without
   device motion or gesture hardware.
+- Native range inputs expose the three labelled raw dynamics rates. Arrow keys
+  provide the same bounded semantic actions as pointer adjustment, and the
+  deterministic replay tape is the synthetic route for exact repetition.
 - The member grid exposes primary and subgroup selection without requiring
   precise canvas pointing.
 - Catalogue facets are labelled native selects with one clear-filter action.
@@ -42,6 +45,9 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Every active field exposes its synthetic contributor label, normalized
   position, polarity, and remaining or persistent lifetime as structured text;
   field identity never depends on canvas color.
+- Alignment, cohesion, and separation rates plus the live Flock/Cohere/Disperse
+  distribution are ordinary text; parameter consequences also remain visible
+  through cohesion, polarization, spacing, and relation metrics.
 - The canvas has a concise text description and is never focus-required.
 - Focus indicators are explicit; forced-colors and 200% zoom layouts are
   supported.
@@ -58,5 +64,6 @@ The canvas is a visual projection, not the sole interface or state authority.
 
 Desktop and mobile checks cover keyboard selection/action, pointer selection,
 scope-aware collective rules, field placement/motion/polarity/lifetime,
-focus visibility, reduced-motion state, intentional start, pause, single-step,
-reset/replay, and horizontal overflow.
+raw dynamics sliders and mode-distribution consequences, focus visibility,
+reduced-motion state, intentional start, pause, single-step, reset/replay, and
+horizontal overflow.

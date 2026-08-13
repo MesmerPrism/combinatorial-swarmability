@@ -1,4 +1,4 @@
-import init, { DemoEngine } from "./pkg/demo_wasm.js?v=fields-v1";
+import init, { DemoEngine } from "./pkg/demo_wasm.js?v=dynamics-v1";
 
 const DEFAULT_SEED = "2026";
 const SPEED_DELTA = 0.10;
@@ -25,6 +25,9 @@ const fieldLifetime = document.querySelector("#field-lifetime");
 const fieldX = document.querySelector("#field-x");
 const fieldY = document.querySelector("#field-y");
 const fieldSelect = document.querySelector("#field-select");
+const dynamicsAlignment = document.querySelector("#dynamics-alignment");
+const dynamicsCohesion = document.querySelector("#dynamics-cohesion");
+const dynamicsSeparation = document.querySelector("#dynamics-separation");
 const atlasFilters = document.querySelector("#atlas-filters");
 const atlasList = document.querySelector("#atlas-list");
 const atlasCount = document.querySelector("#atlas-count");
@@ -43,7 +46,7 @@ let reducedTimestamp = 0;
 let rowWidth = 0;
 
 await init({
-  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=fields-v1", import.meta.url),
+  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=dynamics-v1", import.meta.url),
 });
 engine = new DemoEngine(DEFAULT_SEED);
 rowWidth = DemoEngine.frame_row_width();
@@ -153,6 +156,9 @@ function bindControls() {
     syncSelectedFieldEditor();
     updateFieldControls();
   });
+  bindDynamicsSlider(dynamicsAlignment, "set_alignment", "alignment");
+  bindDynamicsSlider(dynamicsCohesion, "set_cohesion", "cohesion");
+  bindDynamicsSlider(dynamicsSeparation, "set_separation", "separation");
   checkpointSelect.addEventListener("change", () => {
     const checkpoint = savedCheckpoints.get(checkpointSelect.value);
     if (checkpoint) {
@@ -215,6 +221,30 @@ function bindControls() {
   });
 }
 
+function bindDynamicsSlider(slider, actionType, parameter) {
+  slider.addEventListener("pointerdown", (event) => {
+    slider.dataset.inputRoute = event.pointerType || "pointer";
+  });
+  slider.addEventListener("keydown", () => {
+    slider.dataset.inputRoute = "keyboard-or-switch";
+  });
+  slider.addEventListener("input", () => {
+    updateDynamicsOutput(parameter, Number(slider.value));
+  });
+  slider.addEventListener("change", () => {
+    const rate = Number(slider.value);
+    dispatch(
+      { type: actionType, rate },
+      {
+        inputRoute: slider.dataset.inputRoute || "synthetic-slider",
+        normalizedInput: `dynamics.${parameter}.rate(${rate.toFixed(2)})`,
+        policy: "Swarm-wide endogenous dynamics; deterministic weighted transition selection; no multi-user combination",
+      }
+    );
+    delete slider.dataset.inputRoute;
+  });
+}
+
 function interactionTrace(event, normalizedInput, policy = "") {
   return {
     inputRoute: event instanceof PointerEvent && event.detail > 0
@@ -241,6 +271,23 @@ function setBehavior(behavior, trace) {
     behavior,
     expected_selection_revision: state.selection_revision,
   }, trace);
+}
+
+function updateDynamicsOutput(parameter, rate) {
+  document.querySelector(`#dynamics-${parameter}-value`).textContent = rate.toFixed(2);
+}
+
+function updateDynamicsControls() {
+  const controlsByParameter = {
+    alignment: dynamicsAlignment,
+    cohesion: dynamicsCohesion,
+    separation: dynamicsSeparation,
+  };
+  Object.entries(controlsByParameter).forEach(([parameter, slider]) => {
+    const rate = state.dynamics_rates[parameter];
+    slider.value = String(rate);
+    updateDynamicsOutput(parameter, rate);
+  });
 }
 
 function placePersonalField(event) {
@@ -661,6 +708,8 @@ function updateDomState(updateControls = true) {
   document.querySelector("#state-seed").textContent = state.seed;
   document.querySelector("#state-speed").textContent = state.average_speed.toFixed(3);
   document.querySelector("#state-behaviors").textContent = behaviorMixLabel();
+  document.querySelector("#state-dynamics-rates").textContent =
+    `A ${state.dynamics_rates.alignment.toFixed(2)} · C ${state.dynamics_rates.cohesion.toFixed(2)} · S ${state.dynamics_rates.separation.toFixed(2)}`;
   document.querySelector("#state-relations").textContent = String(relationTotal);
   document.querySelector("#state-field-count").textContent = `${state.fields.length} of ${MAX_PERSONAL_FIELDS}`;
   document.querySelector("#state-contributor-count").textContent = `${state.active_contributor_count} of ${CONTRIBUTOR_LABELS.length}`;
@@ -672,6 +721,8 @@ function updateDomState(updateControls = true) {
   document.querySelector("#metric-spacing").textContent = metrics.nearestSpacing.toFixed(3);
   document.querySelector("#metric-speed").textContent = state.average_speed.toFixed(3);
   document.querySelector("#metric-subgroup").textContent = String(state.subgroup_members.length);
+  document.querySelector("#metric-distribution").textContent =
+    `${state.behavior_counts.flock} / ${state.behavior_counts.cohere} / ${state.behavior_counts.disperse}`;
   document.querySelector("#metric-relations").textContent = String(relationTotal);
   document.querySelector("#metric-fields").textContent = String(state.fields.length);
   document.querySelector("#step-button").disabled = state.running;
@@ -681,7 +732,7 @@ function updateDomState(updateControls = true) {
   updateFieldControls();
   canvas.setAttribute(
     "aria-label",
-    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. ${state.fields.length} additive personal fields.`
+    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. Raw dynamics rates ${state.dynamics_rates.alignment.toFixed(2)}, ${state.dynamics_rates.cohesion.toFixed(2)}, ${state.dynamics_rates.separation.toFixed(2)}. ${state.fields.length} additive personal fields.`
   );
   updateMotionMode();
 
@@ -691,6 +742,7 @@ function updateDomState(updateControls = true) {
       activeScope.checked = true;
     }
     seedInput.value = state.seed;
+    updateDynamicsControls();
   }
 }
 

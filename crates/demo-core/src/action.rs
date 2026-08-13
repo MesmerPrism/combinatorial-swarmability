@@ -24,6 +24,21 @@ pub enum CollectiveBehavior {
     Disperse,
 }
 
+/// App-owned rates for entering the three existing collective steering modes.
+///
+/// These values are a bounded technical reconstruction of endogenous controller
+/// rates, not a reproduction of the source system's robot-state model.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DynamicsRates {
+    /// Per-member, per-second rate for entering the alignment-oriented flock mode.
+    pub alignment: f32,
+    /// Per-member, per-second rate for entering the cohesion-oriented cohere mode.
+    pub cohesion: f32,
+    /// Per-member, per-second rate for entering the separation-oriented disperse mode.
+    pub separation: f32,
+}
+
 /// Direction of one app-local synthetic personal field.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -101,6 +116,21 @@ pub enum SemanticAction {
         /// Selection revision against which the action was prepared.
         expected_selection_revision: u64,
     },
+    /// Set the swarm-wide rate for entering the alignment-oriented flock mode.
+    SetAlignment {
+        /// Bounded transitions per member-second.
+        rate: f32,
+    },
+    /// Set the swarm-wide rate for entering the cohesion-oriented cohere mode.
+    SetCohesion {
+        /// Bounded transitions per member-second.
+        rate: f32,
+    },
+    /// Set the swarm-wide rate for entering the separation-oriented disperse mode.
+    SetSeparation {
+        /// Bounded transitions per member-second.
+        rate: f32,
+    },
     /// Place one bounded field with synthetic contributor provenance.
     PlaceField {
         /// Stable field identifier within the scene.
@@ -173,6 +203,15 @@ enum SemanticActionWire {
         behavior: CollectiveBehavior,
         expected_selection_revision: u64,
     },
+    SetAlignment {
+        rate: f32,
+    },
+    SetCohesion {
+        rate: f32,
+    },
+    SetSeparation {
+        rate: f32,
+    },
     PlaceField {
         field_id: u16,
         contributor_id: u8,
@@ -228,6 +267,9 @@ impl<'de> Deserialize<'de> for SemanticAction {
                 behavior,
                 expected_selection_revision,
             },
+            SemanticActionWire::SetAlignment { rate } => Self::SetAlignment { rate },
+            SemanticActionWire::SetCohesion { rate } => Self::SetCohesion { rate },
+            SemanticActionWire::SetSeparation { rate } => Self::SetSeparation { rate },
             SemanticActionWire::PlaceField {
                 field_id,
                 contributor_id,
@@ -273,6 +315,12 @@ pub enum ActionCode {
     SpeedAdjusted,
     /// Collective steering rule changed for all resolved targets.
     BehaviorSet,
+    /// Swarm-wide alignment-mode entry rate changed.
+    AlignmentSet,
+    /// Swarm-wide cohesion-mode entry rate changed.
+    CohesionSet,
+    /// Swarm-wide separation-mode entry rate changed.
+    SeparationSet,
     /// A bounded personal field was placed.
     FieldPlaced,
     /// An existing personal field was moved.
@@ -299,6 +347,8 @@ pub enum ActionCode {
     StaleSelection,
     /// The speed delta was non-finite, zero, or outside the accepted bound.
     InvalidSpeedDelta,
+    /// A raw dynamics rate was non-finite or outside its explicit range.
+    InvalidDynamicsRate,
     /// The requested field identifier is outside the bounded scene contract.
     InvalidFieldId,
     /// A field already uses the requested identifier.
@@ -402,6 +452,8 @@ pub struct PublicState {
     pub average_speed: f32,
     /// Current distribution of collective steering rules.
     pub behavior_counts: BehaviorCounts,
+    /// Swarm-wide app-owned collective-mode entry rates.
+    pub dynamics_rates: DynamicsRates,
     /// Active additive personal fields in stable identifier order.
     pub fields: Vec<FieldSummary>,
     /// Number of app-local synthetic contributor channels currently represented.

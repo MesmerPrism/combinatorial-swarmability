@@ -9,7 +9,10 @@ sliders, and low-rate buttons dispatch app-owned semantic actions into a Rust
 core. Members continuously combine local alignment, cohesion, and separation
 with an assigned `flock`, `cohere`, or `disperse` rule. Up to eight app-local
 personal fields add attract or repel effects with explicit persistent or
-expiring lifetimes and synthetic contributor provenance. The core
+expiring lifetimes and synthetic contributor provenance. Three explicit
+swarm-wide rates can deterministically move members among the existing Flock,
+Cohere, and Disperse modes; they default to zero and are presented as an
+app-owned technical analogy rather than a reproduced robot controller. The core
 projects simulation state through Rusty Matter's
 renderer-neutral `ParticleRenderPayload`; a thin WebAssembly adapter exposes a
 bounded frame buffer to a Canvas2D renderer. The canvas is not the only

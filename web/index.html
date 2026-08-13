@@ -44,7 +44,8 @@
           <p>
             Filter the public catalogue, then inspect what a source reports and what
             this atlas reconstructs. Scope, additive personal fields, and
-            deterministic history are interactive in this slice.
+            deterministic history are bound; raw dynamics controls are
+            available while their atlas card remains planned.
           </p>
         </div>
 
@@ -154,12 +155,13 @@
 
       <section id="demonstration" class="demo shell" aria-labelledby="demo-title">
         <div class="section-heading">
-          <h2 id="demo-title">Interactive reconstruction: scope, fields, and history</h2>
+          <h2 id="demo-title">Interactive reconstruction: scope, fields, dynamics, and history</h2>
           <p>
             Start intentionally, choose one member, the subgroup, or the whole swarm,
             then issue the same collective request through accessible browser controls.
-            Place additive personal fields with explicit polarity and lifetime. Save,
-            retrieve, reset, and replay operate across the same deterministic core.
+            Place additive personal fields with explicit polarity and lifetime,
+            or expose bounded raw mode-transition rates. Save, retrieve, reset,
+            and replay operate across the same deterministic core.
           </p>
         </div>
 
@@ -204,6 +206,7 @@
                 <div><dt>Average speed</dt><dd id="state-speed">0.360</dd></div>
                 <div><dt>Update mode</dt><dd id="state-motion-mode">Standard</dd></div>
                 <div><dt>Collective rules</dt><dd id="state-behaviors">24 flock</dd></div>
+                <div><dt>Raw dynamics rates</dt><dd id="state-dynamics-rates">A 0.00 · C 0.00 · S 0.00</dd></div>
                 <div><dt>Neighbour links</dt><dd id="state-relations">0</dd></div>
                 <div><dt>Personal fields</dt><dd id="state-field-count">0 of 8</dd></div>
                 <div><dt>Synthetic contributors</dt><dd id="state-contributor-count">0 of 4</dd></div>
@@ -222,6 +225,7 @@
                   <div><dt>Nearest spacing</dt><dd id="metric-spacing">0.000</dd></div>
                   <div><dt>Average speed</dt><dd id="metric-speed">0.360</dd></div>
                   <div><dt>Subgroup members</dt><dd id="metric-subgroup">6</dd></div>
+                  <div><dt>Mode distribution (F/C/D)</dt><dd id="metric-distribution">24 / 0 / 0</dd></div>
                   <div><dt>Visible relations</dt><dd id="metric-relations">0</dd></div>
                   <div><dt>Active fields</dt><dd id="metric-fields">0</dd></div>
                 </dl>
@@ -293,6 +297,31 @@
                 <button id="flock-button" type="button">Flock</button>
                 <button id="cohere-button" type="button">Cohere</button>
                 <button id="disperse-button" type="button">Disperse</button>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Raw dynamics transition rates</legend>
+              <p class="control-help">
+                These swarm-wide app-owned rates govern entry into the existing Flock, Cohere, and Disperse modes.
+                They are a bounded technical analogy to endogenous controller rates, not a reproduction of the
+                source system's exploration, task, or other robot states.
+              </p>
+              <p class="control-help">
+                Range 0.00–1.00 transition per member-second; default 0.00 disables automatic transitions.
+                Active rates combine by deterministic weighted selection. There is no hidden randomness control.
+              </p>
+              <div class="dynamics-control">
+                <label for="dynamics-alignment">Alignment / enter Flock <output id="dynamics-alignment-value" for="dynamics-alignment">0.00</output></label>
+                <input id="dynamics-alignment" name="dynamics-alignment" type="range" min="0" max="1" step="0.05" value="0">
+              </div>
+              <div class="dynamics-control">
+                <label for="dynamics-cohesion">Cohesion / enter Cohere <output id="dynamics-cohesion-value" for="dynamics-cohesion">0.00</output></label>
+                <input id="dynamics-cohesion" name="dynamics-cohesion" type="range" min="0" max="1" step="0.05" value="0">
+              </div>
+              <div class="dynamics-control">
+                <label for="dynamics-separation">Separation / enter Disperse <output id="dynamics-separation-value" for="dynamics-separation">0.00</output></label>
+                <input id="dynamics-separation" name="dynamics-separation" type="range" min="0" max="1" step="0.05" value="0">
               </div>
             </fieldset>
 
@@ -433,6 +462,6 @@
     <noscript>
       <p class="noscript-note">JavaScript and WebAssembly are required for the interactive reconstruction.</p>
     </noscript>
-    <script type="module" src="./app.js?v=fields-v1"></script>
+    <script type="module" src="./app.js?v=dynamics-v1"></script>
   </body>
 </html>

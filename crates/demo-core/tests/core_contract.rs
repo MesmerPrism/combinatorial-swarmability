@@ -2,7 +2,8 @@
 
 use combinatorial_swarmability_demo_core::{
     ActionCode, CollectiveBehavior, DemoCore, FieldLifetime, FieldPolarity, SemanticAction,
-    TargetScope, FRAME_ROW_WIDTH, MAX_FIELD_LIFETIME_STEPS, MAX_PERSONAL_FIELDS, MEMBER_COUNT,
+    TargetScope, DEFAULT_DYNAMICS_RATES, FRAME_ROW_WIDTH, MAX_DYNAMICS_RATE,
+    MAX_FIELD_LIFETIME_STEPS, MAX_PERSONAL_FIELDS, MEMBER_COUNT,
 };
 use sha2::{Digest, Sha256};
 
@@ -36,6 +37,26 @@ fn place_field(
         polarity,
         lifetime,
     }
+}
+
+fn set_alignment(rate: f32) -> SemanticAction {
+    SemanticAction::SetAlignment { rate }
+}
+
+fn set_cohesion(rate: f32) -> SemanticAction {
+    SemanticAction::SetCohesion { rate }
+}
+
+fn set_separation(rate: f32) -> SemanticAction {
+    SemanticAction::SetSeparation { rate }
+}
+
+fn run_steps(core: &mut DemoCore, batches: usize) {
+    assert!(core.dispatch(SemanticAction::Start).accepted);
+    for _ in 0..batches {
+        assert_eq!(core.advance_elapsed(128), 8);
+    }
+    assert!(core.dispatch(SemanticAction::Pause).accepted);
 }
 
 #[test]
@@ -581,6 +602,146 @@ fn personal_field_count_and_damaged_actions_fail_closed() {
 }
 
 #[test]
+fn raw_dynamics_rates_are_order_independent_and_same_seed_measurable() {
+    let mut first = DemoCore::new(1_515);
+    assert!(first.dispatch(set_alignment(0.15)).accepted);
+    assert!(first.dispatch(set_cohesion(0.75)).accepted);
+    assert!(first.dispatch(set_separation(0.10)).accepted);
+    run_steps(&mut first, 40);
+
+    let mut reverse = DemoCore::new(1_515);
+    assert!(reverse.dispatch(set_separation(0.10)).accepted);
+    assert!(reverse.dispatch(set_cohesion(0.75)).accepted);
+    assert!(reverse.dispatch(set_alignment(0.15)).accepted);
+    run_steps(&mut reverse, 40);
+
+    assert_eq!(
+        first.snapshot_json().expect("snapshot serializes"),
+        reverse.snapshot_json().expect("snapshot serializes")
+    );
+    let distribution = first.public_state().behavior_counts;
+    assert_eq!(
+        distribution.flock + distribution.cohere + distribution.disperse,
+        MEMBER_COUNT
+    );
+    assert!(distribution.cohere > distribution.flock);
+    assert!(distribution.cohere > distribution.disperse);
+
+    let mut cohesion_only = DemoCore::new(1_515);
+    assert!(cohesion_only.dispatch(set_cohesion(1.0)).accepted);
+    run_steps(&mut cohesion_only, 40);
+
+    let mut separation_only = DemoCore::new(1_515);
+    assert!(separation_only.dispatch(set_separation(1.0)).accepted);
+    run_steps(&mut separation_only, 40);
+
+    assert!(cohesion_only.public_state().behavior_counts.cohere >= 20);
+    assert!(separation_only.public_state().behavior_counts.disperse >= 20);
+    let cohesion_rows = cohesion_only.frame_rows().expect("cohesion rows project");
+    let separation_rows = separation_only
+        .frame_rows()
+        .expect("separation rows project");
+    assert!(mean_pair_distance(&cohesion_rows) < mean_pair_distance(&separation_rows));
+    assert!((polarization(&cohesion_rows) - polarization(&separation_rows)).abs() > 0.02);
+
+    let replay = first.replay_json().expect("raw dynamics replay serializes");
+    let replayed = DemoCore::from_replay_json(&replay).expect("raw dynamics replay reconstructs");
+    assert_eq!(
+        first.snapshot_json().expect("snapshot serializes"),
+        replayed.snapshot_json().expect("snapshot serializes")
+    );
+}
+
+#[test]
+fn raw_dynamics_checkpoint_reset_and_other_mechanisms_share_one_state() {
+    let mut core = DemoCore::new(1_516);
+    assert!(core.dispatch(set_alignment(0.2)).accepted);
+    assert!(core.dispatch(set_cohesion(0.6)).accepted);
+    assert!(core.dispatch(set_separation(0.2)).accepted);
+    assert!(
+        core.dispatch(SemanticAction::SetScope {
+            scope: TargetScope::Swarm
+        })
+        .accepted
+    );
+    let selection_revision = core.public_state().selection_revision;
+    assert!(
+        core.dispatch(set_behavior(CollectiveBehavior::Cohere, selection_revision))
+            .accepted
+    );
+    assert!(
+        core.dispatch(place_field(
+            4,
+            2,
+            0.35,
+            -0.25,
+            FieldPolarity::Attract,
+            FieldLifetime::Expiring { steps: 500 },
+        ))
+        .accepted
+    );
+    run_steps(&mut core, 12);
+
+    let checkpoint = core
+        .snapshot_json()
+        .expect("combined checkpoint serializes");
+    let restored = DemoCore::from_snapshot_json(&checkpoint).expect("combined checkpoint restores");
+    assert_eq!(
+        checkpoint,
+        restored
+            .snapshot_json()
+            .expect("restored snapshot serializes")
+    );
+    assert_eq!(restored.public_state().fields.len(), 1);
+    assert_eq!(
+        restored.public_state().dynamics_rates,
+        core.public_state().dynamics_rates
+    );
+
+    let replay = core.replay_json().expect("combined replay serializes");
+    let replayed = DemoCore::from_replay_json(&replay).expect("combined replay reconstructs");
+    assert_eq!(
+        checkpoint,
+        replayed
+            .snapshot_json()
+            .expect("replayed snapshot serializes")
+    );
+
+    assert!(core.dispatch(SemanticAction::Reset).accepted);
+    assert_eq!(core.public_state().dynamics_rates, DEFAULT_DYNAMICS_RATES);
+    assert!(core.public_state().fields.is_empty());
+    assert_eq!(core.public_state().behavior_counts.flock, MEMBER_COUNT);
+    assert_eq!(core.public_state().tick, 0);
+}
+
+#[test]
+fn invalid_raw_dynamics_rates_and_damaged_state_fail_closed() {
+    let mut core = DemoCore::new(1_517);
+    for action in [
+        set_alignment(-0.01),
+        set_cohesion(MAX_DYNAMICS_RATE + 0.01),
+        set_separation(f32::NAN),
+    ] {
+        let before = core.snapshot_json().expect("snapshot serializes");
+        let receipt = core.dispatch(action);
+        assert!(!receipt.accepted);
+        assert_eq!(receipt.code, ActionCode::InvalidDynamicsRate);
+        assert_eq!(before, core.snapshot_json().expect("snapshot serializes"));
+    }
+
+    assert!(serde_json::from_str::<SemanticAction>(
+        r#"{"type":"set_alignment","rate":0.5,"arbitrary_parameter":"reject"}"#
+    )
+    .is_err());
+
+    let mut damaged: serde_json::Value =
+        serde_json::from_str(&core.snapshot_json().expect("snapshot serializes"))
+            .expect("snapshot parses");
+    damaged["dynamics_rates"]["cohesion"] = serde_json::json!(1.5);
+    assert!(DemoCore::from_snapshot_json(&damaged.to_string()).is_err());
+}
+
+#[test]
 fn matter_payload_and_frame_rows_preserve_scene_identity() {
     let core = DemoCore::new(5);
     let payload = core.render_payload().expect("Matter payload validates");
@@ -627,4 +788,18 @@ fn centroid_x(rows: &[f32]) -> f32 {
         .map(|row| row[1])
         .sum::<f32>()
         / 24.0
+}
+
+fn polarization(rows: &[f32]) -> f32 {
+    let (heading_x, heading_y) =
+        rows.chunks_exact(FRAME_ROW_WIDTH)
+            .fold((0.0, 0.0), |(x, y), row| {
+                let speed = row[4].hypot(row[5]);
+                if speed <= f32::EPSILON {
+                    (x, y)
+                } else {
+                    (x + row[4] / speed, y + row[5] / speed)
+                }
+            });
+    heading_x.hypot(heading_y) / 24.0
 }

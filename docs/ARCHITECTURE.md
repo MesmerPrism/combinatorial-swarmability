@@ -21,6 +21,12 @@ Additive personal fields separately demonstrate app-local synthetic
 contributor provenance, attract/repel polarity, persistent/expiring lifetime,
 and order-independent superposition. Synthetic contributors are not accounts,
 people, durable identity, or live multi-user authority.
+Raw dynamics controls expose three swarm-wide rates for entering the existing
+Flock, Cohere, and Disperse modes. Each rate is bounded to 0.00–1.00 transition
+per member-second and defaults to 0.00, so this mechanism does not alter the
+accepted scene until explicitly activated. It is an app-owned technical
+analogy to endogenous transition controls, not a reproduction of the source's
+exploration/task/other robot-state model.
 
 ## Non-scope
 
@@ -55,6 +61,7 @@ SemanticAction (route-free intent)
         v
 scope and authority policy -- selection revision / resolved targets
 field combination policy -- bounded additive superposition / expiry
+raw dynamics policy -- bounded global rates / deterministic weighted selection
         |
         v
 fixed-step deterministic flock state
@@ -79,6 +86,13 @@ remove. The reducer validates field ID, synthetic contributor channel,
 normalized position, lifetime, and the eight-field bound. Active fields remain
 sorted by stable ID before acceleration is summed, so placement order does not
 change the outcome. Fixed-step expiry, reset, and replay use the same core path.
+
+Raw dynamics actions are three explicit route-free setters: alignment,
+cohesion, and separation. There is no generic parameter map or exposed
+randomness control. At each fixed step, a pure seed/tick/member draw applies
+the combined per-second rate and chooses one existing collective mode by the
+three weights. This makes parameter order irrelevant while keeping same-seed
+state transitions, checkpoints, and replay exact.
 
 The core also owns a strict `combinatorial.swarmability.replay.v1` tape. It
 records accepted semantic actions plus the fixed-step counts actually executed
@@ -112,7 +126,10 @@ visible neighbour-link count, tick, seed, run state, and most recent action.
 It also shows the latest input route, normalized input, semantic action, policy
 resolution, core receipt, cohesion, polarization, nearest spacing, speed, and
 subgroup membership. Active field count, contributor count, position,
-polarity, and lifetime also have non-canvas projections. Replay event/step totals, checkpoint count, and the
+polarity, and lifetime also have non-canvas projections. The three raw rates
+and current Flock/Cohere/Disperse distribution are text, while cohesion,
+polarization, spacing, speed, and relation counts expose consequences. Replay
+event/step totals, checkpoint count, and the
 bounded session operation log also have semantic DOM projections. Animation
 frames do not enter the live region or operation log.
 
@@ -124,7 +141,8 @@ all three scopes, convergent cohere and divergent disperse structure,
 invalid/empty/stale selection, pause/step/reset/restart, strict replay round
 trips and damaged replay rejection, additive-field order independence,
 bounded/damaged fields, expiry/removal, same-seed metrics, and cross-mechanism
-reset/replay,
+reset/replay, raw-rate bounds and damaged input rejection, parameter-order
+independence, deterministic state distributions, and same-seed metric effects,
 Matter payload conversion, exact Git dependency pins, frozen builds, the Wasm
 bundle, public-boundary scans, and browser interaction/accessibility checks.
 
@@ -150,9 +168,12 @@ actions and payloads, not DOM or Canvas code.
 | A loaded snapshot gains false provenance | Snapshot restoration disables replay export; only validated tapes remain replayable |
 | Synthetic provenance becomes identity or authority | Four app-local labels are ephemeral reducer values with no account, storage, or network contract |
 | Field combination depends on action arrival order | Fields are bounded and sorted by stable ID before additive acceleration is summed |
+| A technical analogy is presented as source reproduction | UI and catalogue non-claims distinguish app-owned Flock/Cohere/Disperse rates from the source robot-state model |
+| Arbitrary parameter plumbing hides unstable behavior | Only three named rate actions exist, with fixed 0.00–1.00 bounds and zero defaults |
+| Runtime randomness breaks comparison or replay | Transition draws are pure functions of seed, fixed tick, member ID, and stream ID |
 
 ## Next slice
 
-Bind the additive personal-field catalogue entry to this shared mechanism,
-then continue with raw dynamics parameters. Optics integration,
+Bind the raw-dynamics catalogue entry only after its mechanism gates pass,
+then continue with semantic/Laban dynamics. Optics integration,
 multi-user authority, and Quest adaptation remain separate later decisions.
