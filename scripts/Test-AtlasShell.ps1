@@ -191,6 +191,7 @@ $implemented = @($catalog.items | Where-Object { $_.reconstruction.status -eq 'i
 $implementedIds = @($implemented.public_id | Sort-Object)
 $expectedImplementedIds = @(
     'additive-personal-fields',
+    'lease-expiry-and-handoff',
     'raw-dynamics-parameters',
     'save-retrieve-reset-replay',
     'scope-and-granularity',
@@ -210,4 +211,4 @@ foreach ($item in @($catalog.items)) {
     }
 }
 
-Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, and six bound reconstructions.'
+Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, and seven bound reconstructions.'

@@ -1,6 +1,6 @@
 {
   "schema": "combinatorial.swarmability.public.catalog.export-manifest.v1",
-  "export_version": "2026-08-13.6",
+  "export_version": "2026-08-13.7",
   "generated_on": "2026-08-13",
   "review_state": "accepted_locked_review",
   "source": {
@@ -13,7 +13,7 @@
   },
   "transform": {
     "schema_sha256": "393344ead11abeaba854a80f08abc484c4f8ce6d983d5a4d058abca6b4e180a9",
-    "profile_sha256": "4288c5cb2d6581dbe3fbca301fb854adafdc2ce6bfe143c1894b69dac3c83f32",
+    "profile_sha256": "d5fdafc1eb0e2386a7cd59fdd0e3e3cd4e14e9e973131e1577e5a37b0f30e4e9",
     "selected_rows": 7,
     "rejected_rows": 19,
     "unknown_fields_rejected": true,
@@ -21,7 +21,7 @@
   },
   "output": {
     "relative_path": "web/data/catalog.v1.json",
-    "sha256": "cbe8243f2dc9b69082b170777c18536c1457c571e72fb54ceac6b71e516b4475",
+    "sha256": "bdcb1549659bd3ca9ec3d8fc6ad4254216006d7125b8dcc97378663c4aabe962",
     "item_count": 7
   },
   "boundary_checks": {

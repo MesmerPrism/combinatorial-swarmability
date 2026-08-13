@@ -1,6 +1,6 @@
 {
   "schema": "combinatorial.swarmability.public.catalog.export-profile.v1",
-  "export_version": "2026-08-13.6",
+  "export_version": "2026-08-13.7",
   "expected_source_sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
   "expected_source_row_count": 26,
   "generated_on": "2026-08-13",
@@ -99,10 +99,10 @@
       "source_id": "cs-source-adekoya-et-al-2026-multi-operator-mixed-reality",
       "control_family": "governance-autonomy",
       "public_id": "lease-expiry-and-handoff",
-      "summary": "Reconstruct exclusive per-member control leases with visible acquisition, expiry, release, and handoff.",
-      "status": "planned-reconstruction",
-      "semantic_actions": ["request_lease", "release_lease", "handoff_lease", "expire_lease"],
-      "does_not_claim": "This reconstruction does not reproduce the mixed-reality system or establish endogenous swarm dynamics, mixed-ability access, or equitable authority.",
+      "summary": "Reconstruct bounded per-member simulated authority through revision-fenced acquisition, exact-holder release and use, fixed-step expiry, and a two-step named-receiver handoff.",
+      "status": "implemented-reconstruction",
+      "semantic_actions": ["request_lease", "release_lease", "offer_lease_handoff", "resolve_lease_handoff", "set_leased_behavior"],
+      "does_not_claim": "These fixed-step lease and consent rules use synthetic app-local operators; this reconstruction does not reproduce the mixed-reality system or establish live multi-user/session authority, endogenous swarm governance, mixed-ability access, or equitable authority.",
       "facets": {
         "input_routes": ["mixed-reality", "spatial-interface"],
         "control_families": ["governance-autonomy"],

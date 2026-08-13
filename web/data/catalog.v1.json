@@ -1,12 +1,12 @@
 {
   "schema": "combinatorial.swarmability.public.catalog.v1",
-  "export_version": "2026-08-13.6",
+  "export_version": "2026-08-13.7",
   "source_binding": {
     "authority": "research-memory",
     "sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
     "row_count": 26,
     "schema_sha256": "393344ead11abeaba854a80f08abc484c4f8ce6d983d5a4d058abca6b4e180a9",
-    "profile_sha256": "4288c5cb2d6581dbe3fbca301fb854adafdc2ce6bfe143c1894b69dac3c83f32"
+    "profile_sha256": "d5fdafc1eb0e2386a7cd59fdd0e3e3cd4e14e9e973131e1577e5a37b0f30e4e9"
   },
   "items": [
     {
@@ -397,18 +397,19 @@
         "substrate": "digital"
       },
       "reconstruction": {
-        "status": "planned-reconstruction",
-        "summary": "Reconstruct exclusive per-member control leases with visible acquisition, expiry, release, and handoff.",
+        "status": "implemented-reconstruction",
+        "summary": "Reconstruct bounded per-member simulated authority through revision-fenced acquisition, exact-holder release and use, fixed-step expiry, and a two-step named-receiver handoff.",
         "interaction": "use two operator panels to request grant release and expire one member's lease",
         "effect": "ownership badges and enabled commands move between operators without blending commands",
         "semantic_actions": [
           "request_lease",
           "release_lease",
-          "handoff_lease",
-          "expire_lease"
+          "offer_lease_handoff",
+          "resolve_lease_handoff",
+          "set_leased_behavior"
         ],
         "transfer_boundary": "fully simulated centrally supervised three-robot system without endogenous swarm dynamics or mixed-ability design",
-        "does_not_claim": "This reconstruction does not reproduce the mixed-reality system or establish endogenous swarm dynamics, mixed-ability access, or equitable authority."
+        "does_not_claim": "These fixed-step lease and consent rules use synthetic app-local operators; this reconstruction does not reproduce the mixed-reality system or establish live multi-user/session authority, endogenous swarm governance, mixed-ability access, or equitable authority."
       },
       "facets": {
         "input_routes": [
