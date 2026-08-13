@@ -3,18 +3,20 @@
 ## Decision
 
 Use one deterministic Rust core with semantic actions, a thin WebAssembly
-adapter, semantic HTML controls, and Canvas2D. Keep the first product slice a
-direct `fast` package. Do not add a `morphospace/` workspace until a real
-cross-owner composition or activation decision exists.
+adapter, semantic HTML controls, and Canvas2D. Build the public atlas by adding
+input adapters, app-owned policy, and literature-bound configurations around
+that core rather than duplicating simulations. Keep the product a direct
+`fast` package. Do not add a `morphospace/` workspace until a real cross-owner
+composition or activation decision exists.
 
 ## Scope
 
-The slice demonstrates target-independent collective steering and speed
-actions over three scopes: one selected member, a selected subgroup, or the
-whole swarm. `Flock` maintains local alignment and spacing, `Cohere` steers
-toward peers sharing that rule, and `Disperse` steers away from matching peers
-or the swarm centre. Pointer, keyboard, and button routes adapt into the same
-`SemanticAction` values.
+The atlas shell exposes seven allowlisted interaction mappings and their exact
+evidence and transfer boundaries. The implemented entry demonstrates
+target-independent collective steering and speed actions over three scopes:
+one selected member, a selected subgroup, or the whole swarm. `Flock`
+maintains local alignment and spacing, `Cohere` steers toward peers sharing
+that rule, and `Disperse` steers away from matching peers or the swarm centre.
 
 ## Non-scope
 
@@ -38,13 +40,16 @@ robot deployment, XR relations, or generic ecosystem contracts.
 ## Interfaces
 
 ```text
-pointer / keyboard / buttons
+pointer / keyboard / switch-style button / replay / optional live adapters
         |
         v
-SemanticAction (input-modality-free)
+NormalizedInput (route-specific, bounded)
         |
         v
-Demo reducer -- selection revision / target scope / receipts
+SemanticAction (route-free intent)
+        |
+        v
+scope and authority policy -- selection revision / resolved targets
         |
         v
 fixed-step deterministic flock state
@@ -81,11 +86,14 @@ Every semantic action returns a bounded receipt with acceptance, a stable code,
 changed member IDs, and current state/selection revisions. The DOM shows the
 current scope, target count, selected members, collective-rule distribution,
 visible neighbour-link count, tick, seed, run state, and most recent action.
-Animation frames do not enter the live region.
+It also shows the latest input route, normalized input, semantic action, policy
+resolution, core receipt, cohesion, polarization, nearest spacing, speed, and
+subgroup membership. Animation frames do not enter the live region.
 
 ## Validation
 
-The validation boundary covers deterministic state hashes, serde round trips,
+The validation boundary covers the public catalogue schema, filter facets,
+source links, evidence labels, transfer boundaries, deterministic state hashes, serde round trips,
 all three scopes, convergent cohere and divergent disperse structure,
 invalid/empty/stale selection, pause/step/reset/restart,
 Matter payload conversion, exact Git dependency pins, frozen builds, the Wasm
@@ -103,7 +111,8 @@ actions and payloads, not DOM or Canvas code.
 | --- | --- |
 | Input device silently defines authority | Modality-free semantic actions and independent target scope |
 | Canvas becomes inaccessible authority | Equivalent DOM controls and textual state |
-| Generated summary becomes scholarly evidence | Synthetic fixture until a locked allowlisted export is reviewed |
+| Generated summary becomes scholarly evidence | Hash-bound allowlist transform keeps source reports and reconstruction fields separate |
+| One input device becomes a hidden policy | Route-specific normalization ends before semantic actions and target resolution |
 | Browser policy leaks into reusable core | Palette, projection, timing loop, and DOM remain in `web/` |
 | Moving upstream changes behavior | Full 40-character Matter revision and committed lockfile |
 | Stale target mutates the wrong members | Selection-revision check rejects stale speed and collective-rule actions |

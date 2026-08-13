@@ -17,6 +17,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Wasm release build failed.' }
     & node --check web/app.js
     if ($LASTEXITCODE -ne 0) { throw 'Browser adapter syntax check failed.' }
+    & (Join-Path $PSScriptRoot 'Test-AtlasShell.ps1')
 
     $previousTarget = $env:CARGO_TARGET_DIR
     try {

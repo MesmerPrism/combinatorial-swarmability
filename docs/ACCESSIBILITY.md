@@ -14,6 +14,9 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Scope controls are ordinary radio inputs and remain usable while paused.
 - The member grid exposes primary and subgroup selection without requiring
   precise canvas pointing.
+- Catalogue facets are labelled native selects with one clear-filter action.
+- Atlas entries are ordinary buttons with pressed state; planned mechanisms
+  never masquerade as enabled controls.
 
 ## Perception
 
@@ -26,6 +29,8 @@ The canvas is a visual projection, not the sole interface or state authority.
   count is also presented as text.
 - Current scope, target members, collective-rule distribution, tick, seed, and
   run state are present in the DOM.
+- The input, semantic-action, policy, receipt, and quantitative traces have
+  complete non-canvas representations.
 - The canvas has a concise text description and is never focus-required.
 - Focus indicators are explicit; forced-colors and 200% zoom layouts are
   supported.

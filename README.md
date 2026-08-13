@@ -1,29 +1,30 @@
 # Combinatorial Swarmability
 
-An accessible, deterministic browser reconstruction for examining how
-collective steering rules can address one swarm member, a selected subgroup,
-or the whole swarm. Changing input route does not change target scope or
-authority.
+An accessible, deterministic public interaction atlas for examining how
+physical input routes become semantic requests, how scope and authority
+resolve those requests, and how one swarm core makes the result measurable.
 
-The first slice is intentionally narrow. Pointer, keyboard, and low-rate
-button controls all dispatch the same app-owned semantic actions into a Rust
-core. Members continuously combine local alignment, cohesion, and separation
-with an assigned `flock`, `cohere`, or `disperse` rule. The core projects
-simulation state through Rusty Matter's
+The first interactive entry is intentionally narrow. Pointer, keyboard, and
+low-rate button controls all dispatch the same app-owned semantic actions into
+a Rust core. Members continuously combine local alignment, cohesion, and
+separation with an assigned `flock`, `cohere`, or `disperse` rule. The core
+projects simulation state through Rusty Matter's
 renderer-neutral `ParticleRenderPayload`; a thin WebAssembly adapter exposes a
 bounded frame buffer to a Canvas2D renderer. The canvas is not the only
 information or interaction surface.
 
 This is a reconstruction and research instrument, not an implementation by the
-authors of any cited work and not a universal interaction vocabulary. The
-included public catalog record is synthetic placeholder data pending a
-separate reviewed research-to-public export.
+authors of any cited work and not a universal interaction vocabulary. Its
+versioned public catalogue keeps source reports, evidence maturity, transfer
+limits, and app-owned reconstruction claims separate. The private research
+memory remains the scholarly authority.
 
 ## Repository shape
 
 - `crates/demo-core`: deterministic fixed-step scene and semantic reducer;
 - `crates/demo-wasm`: `wasm-bindgen` browser adapter;
-- `web`: semantic HTML, CSS, ES modules, Canvas2D, and synthetic public data;
+- `web`: semantic HTML, CSS, ES modules, Canvas2D, and the versioned public catalogue;
+- `schemas` and `tools/catalog`: the public catalogue schema and locked export profile;
 - `tests/fixtures`: action and deterministic-state fixtures;
 - `scripts`: build, serve, boundary, dependency, and validation commands;
 - `docs`: architecture, accessibility, data-boundary, and deployment decisions.

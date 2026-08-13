@@ -1,4 +1,4 @@
-import init, { DemoEngine } from "./pkg/demo_wasm.js?v=collective-behavior-v1";
+import init, { DemoEngine } from "./pkg/demo_wasm.js?v=atlas-shell-v1";
 
 const DEFAULT_SEED = "2026";
 const SPEED_DELTA = 0.10;
@@ -11,23 +11,28 @@ const status = document.querySelector("#action-status");
 const controls = document.querySelector("#controls");
 const memberControls = document.querySelector("#member-controls");
 const seedInput = document.querySelector("#seed-input");
+const atlasFilters = document.querySelector("#atlas-filters");
+const atlasList = document.querySelector("#atlas-list");
+const atlasCount = document.querySelector("#atlas-count");
 
 let engine;
 let state;
 let rows = new Float32Array();
+let catalogEntries = [];
+let selectedAtlasId = "";
 let animationHandle = 0;
 let previousTimestamp = 0;
 let reducedTimestamp = 0;
 let rowWidth = 0;
 
 await init({
-  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=collective-behavior-v1", import.meta.url),
+  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=atlas-shell-v1", import.meta.url),
 });
 engine = new DemoEngine(DEFAULT_SEED);
 rowWidth = DemoEngine.frame_row_width();
 createMemberControls(DemoEngine.member_count());
 bindControls();
-await loadSyntheticCatalog();
+await loadPublicCatalog();
 refreshAll();
 
 function createMemberControls(count) {
@@ -42,8 +47,11 @@ function createMemberControls(count) {
     primary.textContent = String(memberId + 1);
     primary.setAttribute("aria-label", `Select member ${memberId + 1} as primary`);
     primary.setAttribute("aria-pressed", "false");
-    primary.addEventListener("click", () => {
-      dispatch({ type: "select_member", member_id: memberId });
+    primary.addEventListener("click", (event) => {
+      dispatch(
+        { type: "select_member", member_id: memberId },
+        interactionTrace(event, `member-control.select(${memberId + 1})`)
+      );
     });
 
     const groupLabel = document.createElement("label");
@@ -51,8 +59,11 @@ function createMemberControls(count) {
     group.type = "checkbox";
     group.dataset.groupMemberId = String(memberId);
     group.setAttribute("aria-label", `Include member ${memberId + 1} in subgroup`);
-    group.addEventListener("change", () => {
-      dispatch({ type: "toggle_subgroup_member", member_id: memberId });
+    group.addEventListener("click", (event) => {
+      dispatch(
+        { type: "toggle_subgroup_member", member_id: memberId },
+        interactionTrace(event, `subgroup.toggle(${memberId + 1})`)
+      );
     });
     groupLabel.append(group);
     const behavior = document.createElement("abbr");
@@ -66,44 +77,71 @@ function createMemberControls(count) {
 }
 
 function bindControls() {
-  document.querySelector("#start-button").addEventListener("click", () => {
-    dispatch({ type: "start" });
+  document.querySelector("#start-button").addEventListener("click", (event) => {
+    dispatch(
+      { type: "start" },
+      interactionTrace(event, "motion.start", "Run-state control; target scope is unchanged")
+    );
   });
-  document.querySelector("#pause-button").addEventListener("click", () => {
-    dispatch({ type: "pause" });
+  document.querySelector("#pause-button").addEventListener("click", (event) => {
+    dispatch(
+      { type: "pause" },
+      interactionTrace(event, "motion.pause", "Run-state control; target scope is unchanged")
+    );
   });
-  document.querySelector("#step-button").addEventListener("click", () => {
-    dispatch({ type: "step" });
+  document.querySelector("#step-button").addEventListener("click", (event) => {
+    dispatch(
+      { type: "step" },
+      interactionTrace(event, "motion.step", "One deterministic fixed step; target scope is unchanged")
+    );
   });
-  document.querySelector("#reset-button").addEventListener("click", () => {
-    dispatch({ type: "reset" });
+  document.querySelector("#reset-button").addEventListener("click", (event) => {
+    dispatch(
+      { type: "reset" },
+      interactionTrace(event, "history.reset", "Whole-scene reset to the active seed")
+    );
   });
-  document.querySelector("#slower-button").addEventListener("click", () => {
-    adjustSpeed(-SPEED_DELTA);
+  document.querySelector("#slower-button").addEventListener("click", (event) => {
+    adjustSpeed(-SPEED_DELTA, interactionTrace(event, "speed.delta(-0.10)"));
   });
-  document.querySelector("#faster-button").addEventListener("click", () => {
-    adjustSpeed(SPEED_DELTA);
+  document.querySelector("#faster-button").addEventListener("click", (event) => {
+    adjustSpeed(SPEED_DELTA, interactionTrace(event, "speed.delta(+0.10)"));
   });
-  document.querySelector("#flock-button").addEventListener("click", () => {
-    setBehavior("flock");
+  document.querySelector("#flock-button").addEventListener("click", (event) => {
+    setBehavior("flock", interactionTrace(event, "collective-rule.flock"));
   });
-  document.querySelector("#cohere-button").addEventListener("click", () => {
-    setBehavior("cohere");
+  document.querySelector("#cohere-button").addEventListener("click", (event) => {
+    setBehavior("cohere", interactionTrace(event, "collective-rule.cohere"));
   });
-  document.querySelector("#disperse-button").addEventListener("click", () => {
-    setBehavior("disperse");
+  document.querySelector("#disperse-button").addEventListener("click", (event) => {
+    setBehavior("disperse", interactionTrace(event, "collective-rule.disperse"));
   });
-  document.querySelector("#clear-subgroup-button").addEventListener("click", () => {
-    dispatch({ type: "clear_subgroup" });
+  document.querySelector("#clear-subgroup-button").addEventListener("click", (event) => {
+    dispatch(
+      { type: "clear_subgroup" },
+      interactionTrace(event, "subgroup.clear", "Subgroup definition changes; no swarm member behavior changes")
+    );
   });
   document.querySelector("#restart-button").addEventListener("click", restartSeed);
 
   controls.querySelectorAll('input[name="scope"]').forEach((input) => {
-    input.addEventListener("change", () => {
+    input.addEventListener("click", (event) => {
       if (input.checked) {
-        dispatch({ type: "set_scope", scope: input.value });
+        dispatch(
+          { type: "set_scope", scope: input.value },
+          interactionTrace(event, `scope.select(${input.value})`, "Target policy changes; swarm dynamics remain unchanged")
+        );
       }
     });
+  });
+
+  atlasFilters.querySelectorAll("select[data-facet]").forEach((select) => {
+    select.addEventListener("change", renderAtlasList);
+  });
+  document.querySelector("#clear-filters").addEventListener("click", () => {
+    atlasFilters.reset();
+    renderAtlasList();
+    atlasFilters.querySelector("select").focus();
   });
 
   canvas.addEventListener("pointerup", selectNearestCanvasMember);
@@ -117,10 +155,16 @@ function bindControls() {
     }
     if (event.key === "+" || event.key === "=") {
       event.preventDefault();
-      adjustSpeed(SPEED_DELTA);
+      adjustSpeed(SPEED_DELTA, {
+        inputRoute: "keyboard-or-switch",
+        normalizedInput: "speed.delta(+0.10)",
+      });
     } else if (event.key === "-" || event.key === "_") {
       event.preventDefault();
-      adjustSpeed(-SPEED_DELTA);
+      adjustSpeed(-SPEED_DELTA, {
+        inputRoute: "keyboard-or-switch",
+        normalizedInput: "speed.delta(-0.10)",
+      });
     }
   });
 
@@ -134,23 +178,35 @@ function bindControls() {
   });
 }
 
-function adjustSpeed(delta) {
+function interactionTrace(event, normalizedInput, policy = "") {
+  return {
+    inputRoute: event instanceof PointerEvent && event.detail > 0
+      ? `${event.pointerType || "pointer"}`
+      : event instanceof MouseEvent && event.detail > 0
+        ? "pointer"
+        : "keyboard-or-switch",
+    normalizedInput,
+    policy,
+  };
+}
+
+function adjustSpeed(delta, trace) {
   dispatch({
     type: "adjust_speed",
     delta,
     expected_selection_revision: state.selection_revision,
-  });
+  }, trace);
 }
 
-function setBehavior(behavior) {
+function setBehavior(behavior, trace) {
   dispatch({
     type: "set_behavior",
     behavior,
     expected_selection_revision: state.selection_revision,
-  });
+  }, trace);
 }
 
-function restartSeed() {
+function restartSeed(event) {
   const seed = seedInput.value.trim();
   if (!/^\d{1,20}$/.test(seed)) {
     announce("Seed must contain between 1 and 20 decimal digits.", true);
@@ -163,6 +219,11 @@ function restartSeed() {
     previousTimestamp = 0;
     reducedTimestamp = 0;
     refreshAll();
+    updateActionTrace(
+      interactionTrace(event, `history.restart-seed(${seed})`, "Whole-scene restart with deterministic seed"),
+      { type: "restart_seed" },
+      { accepted: true, code: "seed_restarted", state_revision: state.state_revision, selection_revision: state.selection_revision }
+    );
     announce(`Restarted with seed ${seed}. Motion is paused.`);
   } catch {
     announce("Seed must be between 0 and 18446744073709551615.", true);
@@ -170,15 +231,34 @@ function restartSeed() {
   }
 }
 
-function dispatch(action) {
+function dispatch(action, trace = {}) {
   try {
     const receipt = JSON.parse(engine.dispatch_json(JSON.stringify(action)));
     refreshAll();
+    updateActionTrace(trace, action, receipt);
     announce(receipt.summary, !receipt.accepted);
     syncAnimation();
   } catch {
     announce("The action could not be applied safely.", true);
   }
+}
+
+function updateActionTrace(trace, action, receipt) {
+  const policy = trace.policy || `${scopeLabel(state.scope)} → ${memberList(state.target_members)}`;
+  const accepted = receipt.accepted ? "accepted" : "rejected";
+  const revision = `state ${receipt.state_revision}, selection ${receipt.selection_revision}`;
+  document.querySelector("#trace-input-route").textContent = trace.inputRoute || "browser control";
+  document.querySelector("#trace-normalized-input").textContent = trace.normalizedInput || action.type;
+  document.querySelector("#trace-semantic-action").textContent = semanticActionLabel(action);
+  document.querySelector("#trace-policy").textContent = policy;
+  document.querySelector("#trace-receipt").textContent = `${receipt.code} · ${accepted} · ${revision}`;
+}
+
+function semanticActionLabel(action) {
+  const parameters = Object.entries(action)
+    .filter(([key]) => key !== "type" && key !== "expected_selection_revision")
+    .map(([key, value]) => `${key}=${value}`);
+  return parameters.length > 0 ? `${action.type}(${parameters.join(", ")})` : action.type;
 }
 
 function refreshAll() {
@@ -231,6 +311,8 @@ function animate(timestamp) {
 }
 
 function updateDomState(updateControls = true) {
+  const relationTotal = relationCount();
+  const metrics = outcomeMetrics();
   document.querySelector("#state-motion").textContent = state.running ? "Running" : "Paused";
   document.querySelector("#state-scope").textContent = scopeLabel(state.scope);
   document.querySelector("#state-targets").textContent = memberList(state.target_members);
@@ -239,7 +321,13 @@ function updateDomState(updateControls = true) {
   document.querySelector("#state-seed").textContent = state.seed;
   document.querySelector("#state-speed").textContent = state.average_speed.toFixed(3);
   document.querySelector("#state-behaviors").textContent = behaviorMixLabel();
-  document.querySelector("#state-relations").textContent = String(relationCount());
+  document.querySelector("#state-relations").textContent = String(relationTotal);
+  document.querySelector("#metric-cohesion").textContent = metrics.cohesion.toFixed(3);
+  document.querySelector("#metric-polarization").textContent = metrics.polarization.toFixed(3);
+  document.querySelector("#metric-spacing").textContent = metrics.nearestSpacing.toFixed(3);
+  document.querySelector("#metric-speed").textContent = state.average_speed.toFixed(3);
+  document.querySelector("#metric-subgroup").textContent = String(state.subgroup_members.length);
+  document.querySelector("#metric-relations").textContent = String(relationTotal);
   document.querySelector("#step-button").disabled = state.running;
   document.querySelector("#start-button").disabled = state.running;
   document.querySelector("#pause-button").disabled = !state.running;
@@ -256,6 +344,48 @@ function updateDomState(updateControls = true) {
     }
     seedInput.value = state.seed;
   }
+}
+
+function outcomeMetrics() {
+  const projectedRows = [];
+  forEachRow((row) => projectedRows.push(row));
+  if (projectedRows.length < 2) {
+    return { cohesion: 1, polarization: 1, nearestSpacing: 0 };
+  }
+
+  let pairDistanceTotal = 0;
+  let pairCount = 0;
+  let nearestDistanceTotal = 0;
+  let headingX = 0;
+  let headingY = 0;
+  for (let firstIndex = 0; firstIndex < projectedRows.length; firstIndex += 1) {
+    const first = projectedRows[firstIndex];
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    const speed = Math.hypot(first[4], first[5]);
+    if (speed > Number.EPSILON) {
+      headingX += first[4] / speed;
+      headingY += first[5] / speed;
+    }
+    for (let secondIndex = firstIndex + 1; secondIndex < projectedRows.length; secondIndex += 1) {
+      const second = projectedRows[secondIndex];
+      const distance = Math.hypot(first[1] - second[1], first[2] - second[2]);
+      pairDistanceTotal += distance;
+      pairCount += 1;
+      nearestDistance = Math.min(nearestDistance, distance);
+    }
+    for (let secondIndex = 0; secondIndex < firstIndex; secondIndex += 1) {
+      const second = projectedRows[secondIndex];
+      nearestDistance = Math.min(nearestDistance, Math.hypot(first[1] - second[1], first[2] - second[2]));
+    }
+    nearestDistanceTotal += nearestDistance;
+  }
+
+  const meanPairDistance = pairDistanceTotal / pairCount;
+  return {
+    cohesion: 1 - Math.min(meanPairDistance / Math.sqrt(8), 1),
+    polarization: Math.hypot(headingX, headingY) / projectedRows.length,
+    nearestSpacing: nearestDistanceTotal / projectedRows.length,
+  };
 }
 
 function updateMotionMode() {
@@ -304,11 +434,18 @@ function selectNearestCanvasMember(event) {
     return;
   }
   const memberId = Math.round(nearest);
-  dispatch(
-    event.shiftKey
-      ? { type: "toggle_subgroup_member", member_id: memberId }
-      : { type: "select_member", member_id: memberId }
-  );
+  const action = event.shiftKey
+    ? { type: "toggle_subgroup_member", member_id: memberId }
+    : { type: "select_member", member_id: memberId };
+  dispatch(action, {
+    inputRoute: event.pointerType || "pointer",
+    normalizedInput: event.shiftKey
+      ? `canvas.subgroup-toggle(${memberId + 1})`
+      : `canvas.select(${memberId + 1})`,
+    policy: event.shiftKey
+      ? "Subgroup definition changes; no swarm member behavior changes"
+      : "Primary member changes; active scope policy determines later targets",
+  });
 }
 
 function draw() {
@@ -520,18 +657,163 @@ function announce(message, isError = false) {
   status.dataset.error = String(isError);
 }
 
-async function loadSyntheticCatalog() {
+async function loadPublicCatalog() {
   try {
-    const response = await fetch("./data/catalog.synthetic.json", { cache: "no-store" });
+    const response = await fetch("./data/catalog.v1.json", { cache: "no-store" });
     if (!response.ok) {
-      return;
+      throw new Error("catalogue response was not successful");
     }
     const catalog = await response.json();
-    const item = catalog.items?.[0];
-    if (catalog.export_status === "synthetic_fixture" && item?.summary) {
-      document.querySelector("#catalog-copy").textContent = `${item.summary} ${item.limitation}`;
+    if (catalog.schema !== "combinatorial.swarmability.public.catalog.v1" || !Array.isArray(catalog.items)) {
+      throw new Error("catalogue schema was not recognized");
     }
+    catalogEntries = [...catalog.items].sort((first, second) => first.display_order - second.display_order);
+    populateAtlasFilters();
+    selectedAtlasId = catalogEntries.find((entry) => entry.reconstruction.status === "implemented-reconstruction")?.public_id
+      || catalogEntries[0]?.public_id
+      || "";
+    renderAtlasList();
+    document.querySelector("#catalog-copy").textContent =
+      `${catalogEntries.length} allowlisted public projections preserve source reports, evidence status, transfer limits, and app reconstruction claims as separate fields.`;
   } catch {
-    // Static placeholder copy remains visible; no network or behavioral report is emitted.
+    atlasCount.textContent = "The public catalogue could not be loaded.";
+    const failure = document.createElement("li");
+    failure.textContent = "Catalogue unavailable. The interactive scope reconstruction remains usable below.";
+    atlasList.replaceChildren(failure);
   }
+}
+
+function populateAtlasFilters() {
+  atlasFilters.querySelectorAll("select[data-facet]").forEach((select) => {
+    const facet = select.dataset.facet;
+    const values = new Set();
+    catalogEntries.forEach((entry) => {
+      entry.facets[facet].forEach((value) => values.add(value));
+    });
+    [...values].sort().forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = humanize(value);
+      select.append(option);
+    });
+  });
+}
+
+function renderAtlasList() {
+  const activeFilters = [...atlasFilters.querySelectorAll("select[data-facet]")]
+    .filter((select) => select.value)
+    .map((select) => ({ facet: select.dataset.facet, value: select.value }));
+  const visibleEntries = catalogEntries.filter((entry) =>
+    activeFilters.every(({ facet, value }) => entry.facets[facet].includes(value))
+  );
+
+  if (!visibleEntries.some((entry) => entry.public_id === selectedAtlasId)) {
+    selectedAtlasId = visibleEntries[0]?.public_id || "";
+  }
+  atlasCount.textContent = `${visibleEntries.length} of ${catalogEntries.length} entries shown.`;
+
+  const fragment = document.createDocumentFragment();
+  visibleEntries.forEach((entry) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    const title = document.createElement("strong");
+    const source = document.createElement("span");
+    const statusLabel = document.createElement("span");
+    button.type = "button";
+    button.dataset.atlasId = entry.public_id;
+    button.setAttribute("aria-pressed", String(entry.public_id === selectedAtlasId));
+    title.textContent = entry.title;
+    source.textContent = `${entry.source.system_or_study}, ${entry.source.year}`;
+    statusLabel.textContent = humanize(entry.reconstruction.status);
+    button.append(title, source, statusLabel);
+    button.addEventListener("click", () => {
+      selectedAtlasId = entry.public_id;
+      renderAtlasList();
+    });
+    item.append(button);
+    fragment.append(item);
+  });
+
+  if (visibleEntries.length === 0) {
+    const empty = document.createElement("li");
+    empty.textContent = "No entries match every active filter.";
+    fragment.append(empty);
+  }
+  atlasList.replaceChildren(fragment);
+  renderAtlasDetail(catalogEntries.find((entry) => entry.public_id === selectedAtlasId));
+}
+
+function renderAtlasDetail(entry) {
+  if (!entry) {
+    setText("#atlas-detail-status", "No matching entry");
+    setText("#atlas-detail-title", "Adjust the filters");
+    setText("#atlas-detail-summary", "No public catalogue entry matches every active filter.");
+    document.querySelector("#atlas-open-demo").hidden = true;
+    return;
+  }
+
+  setText("#atlas-detail-status", humanize(entry.reconstruction.status));
+  setText("#atlas-detail-title", entry.title);
+  setText("#atlas-detail-summary", entry.reconstruction.summary);
+  setText("#detail-input-expression", `${entry.reported.input_expression}. Route: ${entry.reported.input_routes}.`);
+  setText("#detail-semantic-action", entry.reported.semantic_action);
+  setText("#detail-controlled-quantity", `${entry.reported.controlled_quantity} (${entry.reported.parameter_exposure}).`);
+  setText("#detail-scope-timing", `${entry.reported.target_scope}; ${entry.reported.temporal_mode}.`);
+  setText("#detail-combination", `${entry.reported.human_configuration}; ${entry.reported.multi_user_combination}.`);
+  setText("#detail-source", `${entry.source.system_or_study} (${entry.source.year}) · ${entry.source.source_id}`);
+  setText(
+    "#detail-evidence",
+    `${humanize(entry.source.evidence_kind)} · ${humanize(entry.source.literature_status)} · ${humanize(entry.source.catalog_projection_status)} · checked ${entry.source.checked_on}`
+  );
+  setText("#detail-locus", entry.source.source_locus);
+  setText("#detail-transfer", entry.reconstruction.transfer_boundary);
+  setText("#detail-nonclaim", entry.reconstruction.does_not_claim);
+  setText("#entry-trace-input", entry.reported.input_expression);
+  setText("#entry-trace-normalized", entry.facets.input_routes.map(humanize).join(" / "));
+  setText(
+    "#entry-trace-action",
+    `${entry.reported.semantic_action}; atlas actions: ${entry.reconstruction.semantic_actions.join(", ")}`
+  );
+  setText("#entry-trace-policy", `${entry.reported.target_scope}; ${entry.reported.multi_user_combination}`);
+  setText("#entry-trace-effect", entry.reconstruction.effect);
+  renderSourceLinks(entry.source);
+
+  const implemented = entry.reconstruction.status === "implemented-reconstruction";
+  document.querySelector("#atlas-open-demo").hidden = !implemented;
+  setText(
+    "#atlas-demo-state",
+    implemented
+      ? "Interactive now: use the reconstruction below and inspect its normalized input, semantic action, policy resolution, core receipt, and outcome metrics."
+      : "Planned reconstruction: the public source and evidence card is available, but this mechanism is not enabled in the deterministic core yet."
+  );
+}
+
+function renderSourceLinks(source) {
+  const container = document.querySelector("#detail-links");
+  const links = [
+    ["Paper", source.paper_url],
+    ["Project", source.project_url],
+    ["Artifact", source.artifact_url],
+  ].filter(([, url]) => url);
+  const fragment = document.createDocumentFragment();
+  links.forEach(([label, url], index) => {
+    if (index > 0) {
+      fragment.append(document.createTextNode(" · "));
+    }
+    const link = document.createElement("a");
+    link.href = url;
+    link.textContent = label;
+    fragment.append(link);
+  });
+  container.replaceChildren(fragment);
+}
+
+function setText(selector, value) {
+  document.querySelector(selector).textContent = value;
+}
+
+function humanize(value) {
+  return String(value)
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

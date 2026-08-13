@@ -3,17 +3,18 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="An accessible deterministic swarm reconstruction with scope-aware flocking, cohesion, and dispersion.">
+    <meta name="description" content="A public interactive atlas of swarm input mappings, semantic actions, scope policies, deterministic behavior, and evidence boundaries.">
     <meta name="color-scheme" content="light">
     <title>Combinatorial Swarmability</title>
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <a class="skip-link" href="#controls">Skip to controls</a>
+    <a class="skip-link" href="#atlas-filters">Skip to atlas filters</a>
     <header class="site-header">
       <div class="shell header-row">
         <a class="site-name" href="https://mesmerprism.com/">Mesmer Prism</a>
         <nav aria-label="Primary">
+          <a href="#atlas">Atlas</a>
           <a href="#demonstration">Demonstration</a>
           <a href="#context">Context</a>
           <a href="https://mesmerprism.com/projects/rusty-morphospace.html">Rusty Morphospace</a>
@@ -23,24 +24,140 @@
 
     <main>
       <section class="intro shell" aria-labelledby="page-title">
-        <p class="plain-label">Accessible browser reconstruction</p>
+        <p class="plain-label">Public interactive atlas</p>
         <h1 id="page-title">Combinatorial Swarmability</h1>
         <p class="lede">
-          Give one member, a chosen group, or the whole swarm a collective rule:
-          flock, cohere, or disperse. Members continuously sense their neighbours;
-          target scope changes who adopts the rule, not how it is requested.
+          Compare how physical input routes become semantic requests, how scope and
+          authority resolve those requests, and how one deterministic swarm core
+          makes the resulting behavior measurable.
         </p>
         <p class="boundary-note">
-          This synthetic scene is a reconstruction, not an original authors’
-          implementation and not a universal interaction vocabulary. Its public
-          literature card remains placeholder copy pending a reviewed export.
+          Source reports, evidence maturity, app reconstruction, and transfer limits
+          remain distinct. An interactive reconstruction is not an original authors’
+          implementation and does not establish a universal interaction vocabulary.
         </p>
+      </section>
+
+      <section id="atlas" class="atlas shell" aria-labelledby="atlas-title">
+        <div class="section-heading">
+          <h2 id="atlas-title">Atlas entries</h2>
+          <p>
+            Filter the public catalogue, then inspect what a source reports and what
+            this atlas reconstructs. Only the scope entry is interactive in this slice.
+          </p>
+        </div>
+
+        <form id="atlas-filters" class="atlas-filters" aria-label="Filter atlas entries">
+          <label>
+            Input route
+            <select id="filter-input-route" data-facet="input_routes">
+              <option value="">All input routes</option>
+            </select>
+          </label>
+          <label>
+            Control family
+            <select id="filter-control-family" data-facet="control_families">
+              <option value="">All control families</option>
+            </select>
+          </label>
+          <label>
+            Scope
+            <select id="filter-scope" data-facet="scopes">
+              <option value="">All scopes</option>
+            </select>
+          </label>
+          <label>
+            Temporal mode
+            <select id="filter-temporal" data-facet="temporal_modes">
+              <option value="">All temporal modes</option>
+            </select>
+          </label>
+          <label>
+            Multi-user policy
+            <select id="filter-policy" data-facet="multi_user_policies">
+              <option value="">All policies</option>
+            </select>
+          </label>
+          <label>
+            Substrate
+            <select id="filter-substrate" data-facet="substrates">
+              <option value="">All substrates</option>
+            </select>
+          </label>
+          <label>
+            Evidence status
+            <select id="filter-evidence" data-facet="evidence_statuses">
+              <option value="">All evidence statuses</option>
+            </select>
+          </label>
+          <button id="clear-filters" type="button">Clear filters</button>
+        </form>
+
+        <p id="atlas-count" class="atlas-count" role="status" aria-live="polite">
+          Loading the public catalogue.
+        </p>
+
+        <div class="atlas-layout">
+          <ul id="atlas-list" class="atlas-list" aria-label="Atlas entries"></ul>
+
+          <article id="atlas-detail" class="atlas-detail" aria-labelledby="atlas-detail-title">
+            <header>
+              <p id="atlas-detail-status" class="detail-status">Catalogue entry</p>
+              <h3 id="atlas-detail-title">Select an atlas entry</h3>
+              <p id="atlas-detail-summary">The source and reconstruction boundary will appear here.</p>
+            </header>
+
+            <div class="detail-grid">
+              <section aria-labelledby="reported-title">
+                <h4 id="reported-title">What the source reports</h4>
+                <dl class="detail-list">
+                  <div><dt>Input expression</dt><dd id="detail-input-expression">—</dd></div>
+                  <div><dt>Semantic action</dt><dd id="detail-semantic-action">—</dd></div>
+                  <div><dt>Controlled quantity</dt><dd id="detail-controlled-quantity">—</dd></div>
+                  <div><dt>Scope and timing</dt><dd id="detail-scope-timing">—</dd></div>
+                  <div><dt>Combination policy</dt><dd id="detail-combination">—</dd></div>
+                </dl>
+              </section>
+
+              <section aria-labelledby="evidence-title">
+                <h4 id="evidence-title">Evidence and transfer</h4>
+                <dl class="detail-list">
+                  <div><dt>Source</dt><dd id="detail-source">—</dd></div>
+                  <div><dt>Evidence</dt><dd id="detail-evidence">—</dd></div>
+                  <div><dt>Checked locus</dt><dd id="detail-locus">—</dd></div>
+                  <div><dt>Transfer boundary</dt><dd id="detail-transfer">—</dd></div>
+                  <div><dt>This atlas does not claim</dt><dd id="detail-nonclaim">—</dd></div>
+                </dl>
+                <p id="detail-links" class="detail-links"></p>
+              </section>
+            </div>
+
+            <section class="entry-trace" aria-labelledby="entry-trace-title">
+              <h4 id="entry-trace-title">Mapping trace</h4>
+              <ol>
+                <li><strong>Physical expression</strong><span id="entry-trace-input">—</span></li>
+                <li><strong>Normalized input</strong><span id="entry-trace-normalized">—</span></li>
+                <li><strong>Semantic action</strong><span id="entry-trace-action">—</span></li>
+                <li><strong>Scope and authority</strong><span id="entry-trace-policy">—</span></li>
+                <li><strong>Resulting effect</strong><span id="entry-trace-effect">—</span></li>
+              </ol>
+            </section>
+
+            <p id="atlas-demo-state" class="atlas-demo-state">Select an entry to see implementation status.</p>
+            <a id="atlas-open-demo" class="text-action" href="#demonstration" hidden>
+              Open the interactive reconstruction
+            </a>
+          </article>
+        </div>
       </section>
 
       <section id="demonstration" class="demo shell" aria-labelledby="demo-title">
         <div class="section-heading">
-          <h2 id="demo-title">Addressing scope</h2>
-          <p>Start intentionally, select members, choose a scope, then assign a collective response.</p>
+          <h2 id="demo-title">Interactive reconstruction: scope and granularity</h2>
+          <p>
+            Start intentionally, choose one member, the subgroup, or the whole swarm,
+            then issue the same collective request through accessible browser controls.
+          </p>
         </div>
 
         <div class="demo-layout">
@@ -86,6 +203,33 @@
               <p id="action-status" class="action-status" role="status" aria-live="polite">
                 Ready. Motion will not begin until Start is pressed.
               </p>
+
+              <section class="metrics-block" aria-labelledby="metrics-title">
+                <h4 id="metrics-title">Quantitative outcome</h4>
+                <dl class="metrics-grid">
+                  <div><dt>Cohesion index</dt><dd id="metric-cohesion">0.000</dd></div>
+                  <div><dt>Polarization</dt><dd id="metric-polarization">0.000</dd></div>
+                  <div><dt>Nearest spacing</dt><dd id="metric-spacing">0.000</dd></div>
+                  <div><dt>Average speed</dt><dd id="metric-speed">0.360</dd></div>
+                  <div><dt>Subgroup members</dt><dd id="metric-subgroup">6</dd></div>
+                  <div><dt>Visible relations</dt><dd id="metric-relations">0</dd></div>
+                </dl>
+                <p class="metric-note">
+                  Cohesion and polarization are unitless 0–1 summaries; spacing uses
+                  normalized scene units. Metrics are descriptive, not participant outcomes.
+                </p>
+              </section>
+
+              <section class="action-trace" aria-labelledby="action-trace-title">
+                <h4 id="action-trace-title">Latest action provenance</h4>
+                <dl class="trace-grid">
+                  <div><dt>Input route</dt><dd id="trace-input-route">No input yet</dd></div>
+                  <div><dt>Normalized input</dt><dd id="trace-normalized-input">—</dd></div>
+                  <div><dt>Semantic action</dt><dd id="trace-semantic-action">—</dd></div>
+                  <div><dt>Scope and policy</dt><dd id="trace-policy">—</dd></div>
+                  <div><dt>Core receipt</dt><dd id="trace-receipt">—</dd></div>
+                </dl>
+              </section>
             </section>
           </div>
 
@@ -158,31 +302,29 @@
       </section>
 
       <section id="context" class="context shell" aria-labelledby="context-title">
-        <h2 id="context-title">What this slice proves</h2>
+        <h2 id="context-title">What this atlas preserves</h2>
         <div class="context-grid">
           <article>
-            <h3>Independent dimensions</h3>
+            <h3>Input is not authority</h3>
             <p>
-              A pointer click, a focused member control, and a low-rate button all
-              become semantic requests. The current target scope—not the input
-              device—decides which members receive a collective rule.
+              Pointer, keyboard, switch-style activation, gesture, pose, MIDI, or
+              replay can normalize into the same semantic request. Scope and
+              authority remain explicit policy rather than device side effects.
             </p>
           </article>
           <article>
-            <h3>Reusable Rust boundary</h3>
+            <h3>One deterministic core</h3>
             <p>
-              A deterministic Rust core resolves local alignment, cohesion,
-              separation, and per-member collective rules before producing Rusty
-              Matter particle payloads.
-              Canvas drawing and DOM accessibility remain browser adapters, so a
-              later headset route can reuse the core without importing browser code.
+              The Rust reducer resolves scope and executes local alignment,
+              cohesion, separation, and per-member rules before producing Rusty
+              Matter payloads. Browser controls and Canvas2D remain adapters.
             </p>
           </article>
           <article>
-            <h3>Evidence boundary</h3>
+            <h3>Evidence is not reproduction</h3>
             <p id="catalog-copy">
-              Synthetic placeholder: public paper and artifact links are withheld
-              until the first allowlisted research-to-public export is reviewed.
+              The versioned public catalogue keeps source reports, evidence status,
+              transfer limits, and app reconstruction claims visibly separate.
             </p>
           </article>
         </div>
@@ -199,6 +341,6 @@
     <noscript>
       <p class="noscript-note">JavaScript and WebAssembly are required for the interactive reconstruction.</p>
     </noscript>
-    <script type="module" src="./app.js?v=collective-behavior-v1"></script>
+    <script type="module" src="./app.js?v=atlas-shell-v1"></script>
   </body>
 </html>
