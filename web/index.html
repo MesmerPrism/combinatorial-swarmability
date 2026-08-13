@@ -157,6 +157,7 @@
           <p>
             Start intentionally, choose one member, the subgroup, or the whole swarm,
             then issue the same collective request through accessible browser controls.
+            Save, retrieve, reset, and replay operate across the same deterministic core.
           </p>
         </div>
 
@@ -199,6 +200,8 @@
                 <div><dt>Update mode</dt><dd id="state-motion-mode">Standard</dd></div>
                 <div><dt>Collective rules</dt><dd id="state-behaviors">24 flock</dd></div>
                 <div><dt>Neighbour links</dt><dd id="state-relations">0</dd></div>
+                <div><dt>Replay tape</dt><dd id="state-replay-events">0 events / 0 steps</dd></div>
+                <div><dt>Saved checkpoints</dt><dd id="state-checkpoint-count">0 of 5</dd></div>
               </dl>
               <p id="action-status" class="action-status" role="status" aria-live="polite">
                 Ready. Motion will not begin until Start is pressed.
@@ -227,8 +230,19 @@
                   <div><dt>Normalized input</dt><dd id="trace-normalized-input">—</dd></div>
                   <div><dt>Semantic action</dt><dd id="trace-semantic-action">—</dd></div>
                   <div><dt>Scope and policy</dt><dd id="trace-policy">—</dd></div>
-                  <div><dt>Core receipt</dt><dd id="trace-receipt">—</dd></div>
+                  <div><dt>Reducer or history receipt</dt><dd id="trace-receipt">—</dd></div>
                 </dl>
+              </section>
+
+              <section class="history-log" aria-labelledby="history-log-title">
+                <h4 id="history-log-title">Session history</h4>
+                <p>
+                  The latest 50 semantic and history operations remain visible here.
+                  Animation frames stay in the replay tape and do not flood this list.
+                </p>
+                <ol id="history-events">
+                  <li>No operations yet.</li>
+                </ol>
               </section>
             </section>
           </div>
@@ -242,7 +256,6 @@
                 <button id="start-button" type="button">Start</button>
                 <button id="pause-button" type="button">Pause</button>
                 <button id="step-button" type="button">Step</button>
-                <button id="reset-button" type="button">Reset</button>
               </div>
             </fieldset>
 
@@ -287,6 +300,28 @@
               <button id="clear-subgroup-button" class="secondary-button" type="button">
                 Clear subgroup
               </button>
+            </fieldset>
+
+            <fieldset>
+              <legend>History and deterministic replay</legend>
+              <p class="control-help">
+                Checkpoints are kept in this browser tab only. Saving pauses motion;
+                retrieving and replaying reconstruct the recorded semantic actions and fixed steps.
+              </p>
+              <label class="input-label" for="checkpoint-name">Checkpoint name</label>
+              <div class="history-save-row">
+                <input id="checkpoint-name" name="checkpoint-name" type="text" maxlength="32" value="Checkpoint 1" autocomplete="off">
+                <button id="save-checkpoint-button" type="button">Save checkpoint</button>
+              </div>
+              <label class="input-label" for="checkpoint-select">Saved checkpoint</label>
+              <select id="checkpoint-select" name="checkpoint-select">
+                <option value="">No saved checkpoints</option>
+              </select>
+              <div class="button-row history-buttons">
+                <button id="retrieve-checkpoint-button" type="button" disabled>Retrieve</button>
+                <button id="replay-button" type="button" disabled>Replay current run</button>
+                <button id="reset-button" type="button">Reset scene</button>
+              </div>
             </fieldset>
 
             <fieldset>
@@ -341,6 +376,6 @@
     <noscript>
       <p class="noscript-note">JavaScript and WebAssembly are required for the interactive reconstruction.</p>
     </noscript>
-    <script type="module" src="./app.js?v=atlas-shell-v1"></script>
+    <script type="module" src="./app.js?v=history-v1"></script>
   </body>
 </html>

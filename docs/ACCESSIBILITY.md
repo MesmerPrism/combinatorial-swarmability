@@ -17,6 +17,9 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Catalogue facets are labelled native selects with one clear-filter action.
 - Atlas entries are ordinary buttons with pressed state; planned mechanisms
   never masquerade as enabled controls.
+- Save, retrieve, reset, and replay are ordinary buttons with a labelled native
+  select. Five session-local checkpoint names avoid precision, drag, or timing
+  requirements.
 
 ## Perception
 
@@ -31,6 +34,8 @@ The canvas is a visual projection, not the sole interface or state authority.
   run state are present in the DOM.
 - The input, semantic-action, policy, receipt, and quantitative traces have
   complete non-canvas representations.
+- Replay event/step counts, saved-checkpoint count, and the latest 50 semantic
+  or history operations remain visible as structured text.
 - The canvas has a concise text description and is never focus-required.
 - Focus indicators are explicit; forced-colors and 200% zoom layouts are
   supported.
@@ -39,7 +44,7 @@ The canvas is a visual projection, not the sole interface or state authority.
 
 - `prefers-reduced-motion` limits the running simulation to a low update rate
   and disables decorative transitions.
-- Simulation frames do not update an ARIA live region.
+- Simulation frames do not update an ARIA live region or append history rows.
 - The live status changes only after semantic actions, validation errors, or
   major run-state transitions.
 

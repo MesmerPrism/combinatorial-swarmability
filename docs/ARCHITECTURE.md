@@ -31,10 +31,10 @@ robot deployment, XR relations, or generic ecosystem contracts.
 | Sources, evidence, and private mapping catalog | Private research memory |
 | Public synthesis and site navigation | MesmerPrism.github.io |
 | Generic particle payload contract | Rusty Matter |
-| Scene semantics, reducer, deterministic flock, palette, and browser behavior | This app |
+| Scene semantics, reducer, deterministic replay, local checkpoints, palette, and browser behavior | This app |
 | DOM accessibility and Canvas2D projection | Browser adapter in this app |
 | Future tracked-space relation | Rusty Lattice, only when required |
-| Future accepted sessions, peers, leases, or replay | Rusty Manifold, only when required |
+| Future accepted multi-user sessions, peers, or leases | Rusty Manifold, only when required |
 | Future Quest/OpenXR hosting | A separate Quest adapter over `demo-core` |
 
 ## Interfaces
@@ -69,6 +69,18 @@ keeps selection revision separate from state revision so actions built against
 stale target selections fail closed. The browser never sends input-modality
 names into the reducer.
 
+The core also owns a strict `combinatorial.swarmability.replay.v1` tape. It
+records accepted semantic actions plus the fixed-step counts actually executed
+by browser elapsed-time updates. Replay starts from the tape's seed and runs
+those same reducer and simulation paths. The tape rejects unknown fields,
+unsupported schemas, zero or excessive step counts, rejected actions, and
+oversized event histories. Restored snapshots do not silently acquire replay
+provenance.
+
+The browser owns only session-local checkpoint names, up to five replay-tape
+copies, and a 50-entry readable operation log. Those controls add no durable
+storage, account, network, or multi-user authority.
+
 The Wasm adapter exposes one fixed-size row per member:
 
 ```text
@@ -88,14 +100,17 @@ current scope, target count, selected members, collective-rule distribution,
 visible neighbour-link count, tick, seed, run state, and most recent action.
 It also shows the latest input route, normalized input, semantic action, policy
 resolution, core receipt, cohesion, polarization, nearest spacing, speed, and
-subgroup membership. Animation frames do not enter the live region.
+subgroup membership. Replay event/step totals, checkpoint count, and the
+bounded session operation log also have semantic DOM projections. Animation
+frames do not enter the live region or operation log.
 
 ## Validation
 
 The validation boundary covers the public catalogue schema, filter facets,
 source links, evidence labels, transfer boundaries, deterministic state hashes, serde round trips,
 all three scopes, convergent cohere and divergent disperse structure,
-invalid/empty/stale selection, pause/step/reset/restart,
+invalid/empty/stale selection, pause/step/reset/restart, strict replay round
+trips and damaged replay rejection,
 Matter payload conversion, exact Git dependency pins, frozen builds, the Wasm
 bundle, public-boundary scans, and browser interaction/accessibility checks.
 
@@ -117,9 +132,11 @@ actions and payloads, not DOM or Canvas code.
 | Moving upstream changes behavior | Full 40-character Matter revision and committed lockfile |
 | Stale target mutates the wrong members | Selection-revision check rejects stale speed and collective-rule actions |
 | Moving dots imply collectivity without showing it | Deterministic neighbour rules, relational lines, distinct rule shapes, and pair-distance tests |
+| Browser history becomes a second simulation | Checkpoints contain versioned core replay tapes and reconstruct through the same reducer |
+| A loaded snapshot gains false provenance | Snapshot restoration disables replay export; only validated tapes remain replayable |
 
 ## Next slice
 
-After the public boundary is accepted, replace the synthetic reference card
-with one allowlisted, source-linked reconstruction record. Optics integration,
+Bind the accepted historical-versioning catalogue entry to this shared history
+mechanism, then continue with additive personal fields. Optics integration,
 multi-user authority, and Quest adaptation remain separate later decisions.

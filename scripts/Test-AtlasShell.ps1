@@ -19,7 +19,10 @@ $requiredIds = @(
     'entry-trace-effect', 'trace-input-route', 'trace-normalized-input',
     'trace-semantic-action', 'trace-policy', 'trace-receipt', 'metric-cohesion',
     'metric-polarization', 'metric-spacing', 'metric-speed', 'metric-subgroup',
-    'metric-relations'
+    'metric-relations', 'state-replay-events', 'state-checkpoint-count',
+    'checkpoint-name', 'checkpoint-select', 'save-checkpoint-button',
+    'retrieve-checkpoint-button', 'replay-button', 'reset-button',
+    'history-events'
 )
 foreach ($id in $requiredIds) {
     if ($html -notmatch "id=[`"']$([regex]::Escape($id))[`"']") {
@@ -46,10 +49,27 @@ if ($script -notmatch 'fetch\("\./data/catalog\.v1\.json"' -or $script -match 'c
 if ($styles -notmatch '\[hidden\]\s*\{[^}]*display:\s*none\s*!important') {
     throw 'Author styles must preserve the native hidden state for planned entry actions.'
 }
-foreach ($functionName in @('populateAtlasFilters', 'renderAtlasList', 'renderAtlasDetail', 'updateActionTrace', 'outcomeMetrics')) {
+foreach ($functionName in @(
+    'populateAtlasFilters', 'renderAtlasList', 'renderAtlasDetail',
+    'updateActionTrace', 'outcomeMetrics', 'saveCheckpoint',
+    'retrieveCheckpoint', 'replayCurrentRun', 'renderSessionHistory'
+)) {
     if ($script -notmatch "function\s+$functionName\s*\(") {
         throw "Atlas adapter is missing $functionName."
     }
+}
+foreach ($adapterMethod in @('engine.replay_json()', 'engine.load_replay_json(')) {
+    if (-not $script.Contains($adapterMethod)) {
+        throw "Atlas history infrastructure is missing the Wasm adapter call: $adapterMethod"
+    }
+}
+if ($script -notmatch 'const MAX_CHECKPOINTS = 5;' -or
+    $script -notmatch 'const MAX_SESSION_HISTORY = 50;' -or
+    $script -notmatch 'const savedCheckpoints = new Map\(\);') {
+    throw 'Atlas history must remain bounded to five tab-local checkpoints and 50 visible operations.'
+}
+if ($script -match '(?:localStorage|sessionStorage|indexedDB)') {
+    throw 'The first history slice must remain session-local and in memory.'
 }
 if ($script -notmatch 'event instanceof PointerEvent && event\.detail > 0') {
     throw 'The input adapter must distinguish keyboard-generated PointerEvent clicks from physical pointer input.'

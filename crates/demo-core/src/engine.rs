@@ -9,6 +9,9 @@ use crate::action::{
     ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, MemberSummary, PublicState,
     SemanticAction, TargetScope,
 };
+use crate::replay::{
+    validate_replay_tape, ReplayEvent, ReplayRecorder, ReplayTape, MAX_REPLAY_JSON_BYTES,
+};
 use crate::rng::SplitMix64;
 
 /// Number of members in the first public scene.
@@ -38,6 +41,8 @@ pub enum DemoError {
     Json(serde_json::Error),
     /// Restored snapshot violates the fixed scene shape.
     InvalidSnapshot(&'static str),
+    /// Replay input violates the bounded deterministic tape contract.
+    InvalidReplay(&'static str),
     /// Rusty Matter rejected the particle state or render payload.
     Matter(String),
 }
@@ -47,6 +52,7 @@ impl fmt::Display for DemoError {
         match self {
             Self::Json(error) => write!(formatter, "snapshot JSON error: {error}"),
             Self::InvalidSnapshot(message) => write!(formatter, "invalid snapshot: {message}"),
+            Self::InvalidReplay(message) => write!(formatter, "invalid replay: {message}"),
             Self::Matter(message) => write!(formatter, "Matter payload error: {message}"),
         }
     }
@@ -80,6 +86,7 @@ struct DemoSnapshot {
 #[derive(Clone, Debug)]
 pub struct DemoCore {
     snapshot: DemoSnapshot,
+    replay: ReplayRecorder,
 }
 
 impl DemoCore {
@@ -88,6 +95,7 @@ impl DemoCore {
     pub fn new(seed: u64) -> Self {
         Self {
             snapshot: initial_snapshot(seed),
+            replay: ReplayRecorder::new(seed),
         }
     }
 
@@ -99,7 +107,11 @@ impl DemoCore {
     pub fn from_snapshot_json(json: &str) -> Result<Self, DemoError> {
         let snapshot: DemoSnapshot = serde_json::from_str(json)?;
         validate_snapshot(&snapshot)?;
-        Ok(Self { snapshot })
+        let seed = snapshot.seed;
+        Ok(Self {
+            snapshot,
+            replay: ReplayRecorder::unavailable(seed),
+        })
     }
 
     /// Serializes all deterministic reducer and simulation state.
@@ -111,11 +123,62 @@ impl DemoCore {
         Ok(serde_json::to_string(&self.snapshot)?)
     }
 
+    /// Serializes the bounded semantic-action and fixed-step replay tape.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DemoError`] when the tape exceeded its bounds or serialization fails.
+    pub fn replay_json(&self) -> Result<String, DemoError> {
+        if self.snapshot.running || self.snapshot.accumulator_millis != 0 {
+            return Err(DemoError::InvalidReplay(
+                "pause before exporting a replay tape",
+            ));
+        }
+        let tape = self
+            .replay
+            .tape()
+            .ok_or(DemoError::InvalidReplay("replay recording is unavailable"))?;
+        Ok(serde_json::to_string(&tape)?)
+    }
+
+    /// Reconstructs a deterministic core from a strict bounded replay tape.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DemoError`] when the tape is malformed, out of bounds, or rejects an action.
+    pub fn from_replay_json(json: &str) -> Result<Self, DemoError> {
+        if json.len() > MAX_REPLAY_JSON_BYTES {
+            return Err(DemoError::InvalidReplay("replay byte limit exceeded"));
+        }
+        let tape: ReplayTape = serde_json::from_str(json)?;
+        validate_replay_tape(&tape).map_err(DemoError::InvalidReplay)?;
+        let expected_tape = tape.clone();
+        let mut core = Self::new(tape.initial_seed);
+        for event in tape.events {
+            match event {
+                ReplayEvent::Action { action } => {
+                    if !core.dispatch(action).accepted {
+                        return Err(DemoError::InvalidReplay("recorded action was rejected"));
+                    }
+                }
+                ReplayEvent::AdvanceSteps { steps } => core.replay_steps(steps)?,
+            }
+        }
+        if core.snapshot.running || core.snapshot.accumulator_millis != 0 {
+            return Err(DemoError::InvalidReplay("replay tape must end paused"));
+        }
+        if core.replay.tape().as_ref() != Some(&expected_tape) {
+            return Err(DemoError::InvalidReplay("replayed tape did not round trip"));
+        }
+        Ok(core)
+    }
+
     /// Applies one semantic action and returns a bounded receipt.
     #[must_use]
     #[allow(clippy::needless_pass_by_value)]
     pub fn dispatch(&mut self, action: SemanticAction) -> ActionReceipt {
-        match action {
+        let recorded_action = action.clone();
+        let receipt = match action {
             SemanticAction::SetScope { scope } => self.set_scope(scope),
             SemanticAction::SelectMember { member_id } => self.select_member(member_id),
             SemanticAction::ToggleSubgroupMember { member_id } => {
@@ -135,7 +198,11 @@ impl DemoCore {
             SemanticAction::Step => self.step_action(),
             SemanticAction::Reset => self.reset(),
             SemanticAction::RestartSeed { seed } => self.restart_seed(seed),
+        };
+        if receipt.accepted {
+            self.replay.record_action(recorded_action);
         }
+        receipt
     }
 
     /// Advances elapsed time through bounded fixed steps when running.
@@ -159,6 +226,7 @@ impl DemoCore {
         if completed == MAX_CATCH_UP_STEPS {
             self.snapshot.accumulator_millis %= FIXED_STEP_MILLIS;
         }
+        self.replay.record_advance(completed);
         completed
     }
 
@@ -217,6 +285,9 @@ impl DemoCore {
             behavior_counts,
             state_revision: self.snapshot.state_revision,
             selection_revision: self.snapshot.selection_revision,
+            replay_event_count: self.replay.event_count(),
+            replay_step_count: self.replay.total_steps(),
+            replay_available: self.replay.available(),
             members,
         }
     }
@@ -557,6 +628,21 @@ impl DemoCore {
         self.snapshot.particles.particles = next;
         self.snapshot.particles.time_seconds += FIXED_STEP_SECONDS;
         self.bump_state();
+    }
+
+    fn replay_steps(&mut self, steps: u64) -> Result<(), DemoError> {
+        if !self.snapshot.running {
+            return Err(DemoError::InvalidReplay(
+                "advance steps require a running simulation",
+            ));
+        }
+        let steps = u32::try_from(steps)
+            .map_err(|_| DemoError::InvalidReplay("replay advance count is too large"))?;
+        for _ in 0..steps {
+            self.step_simulation();
+        }
+        self.replay.record_advance(steps);
+        Ok(())
     }
 
     fn resolved_targets(&self) -> Vec<u16> {

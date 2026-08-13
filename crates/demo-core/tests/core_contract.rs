@@ -181,6 +181,126 @@ fn actions_and_snapshots_round_trip_strictly() {
 }
 
 #[test]
+fn deterministic_replay_preserves_member_subgroup_and_swarm_actions() {
+    let mut core = DemoCore::new(2026);
+
+    let revision = core.public_state().selection_revision;
+    let _ = core.dispatch(set_behavior(CollectiveBehavior::Cohere, revision));
+    let _ = core.dispatch(SemanticAction::SetScope {
+        scope: TargetScope::Subgroup,
+    });
+    let revision = core.public_state().selection_revision;
+    let _ = core.dispatch(adjust(0.15, revision));
+    let _ = core.dispatch(SemanticAction::SetScope {
+        scope: TargetScope::Swarm,
+    });
+    let revision = core.public_state().selection_revision;
+    let _ = core.dispatch(set_behavior(CollectiveBehavior::Disperse, revision));
+    let _ = core.dispatch(SemanticAction::Start);
+    assert_eq!(core.advance_elapsed(128), 8);
+    assert_eq!(core.advance_elapsed(48), 3);
+    let _ = core.dispatch(SemanticAction::Pause);
+
+    let expected_snapshot = core.snapshot_json().expect("snapshot serializes");
+    let tape = core.replay_json().expect("replay tape serializes");
+    let replayed = DemoCore::from_replay_json(&tape).expect("replay tape reconstructs");
+    assert_eq!(
+        expected_snapshot,
+        replayed.snapshot_json().expect("snapshot serializes")
+    );
+    assert_eq!(
+        tape,
+        replayed.replay_json().expect("replay tape serializes")
+    );
+    let state = replayed.public_state();
+    assert_eq!(state.scope, TargetScope::Swarm);
+    assert_eq!(state.tick, 11);
+    assert_eq!(state.behavior_counts.cohere, 0);
+    assert_eq!(state.behavior_counts.disperse, MEMBER_COUNT);
+    assert!(state.replay_available);
+    assert_eq!(state.replay_step_count, 11);
+    assert_eq!(state.replay_event_count, 8);
+}
+
+#[test]
+fn deterministic_replay_rejects_damage_and_unbound_snapshots() {
+    let unknown_field = r#"{
+        "schema":"combinatorial.swarmability.replay.v1",
+        "initial_seed":2026,
+        "events":[],
+        "private_commentary":"reject"
+    }"#;
+    assert!(DemoCore::from_replay_json(unknown_field).is_err());
+
+    let advance_while_paused = r#"{
+        "schema":"combinatorial.swarmability.replay.v1",
+        "initial_seed":2026,
+        "events":[{"kind":"advance_steps","steps":1}]
+    }"#;
+    assert!(DemoCore::from_replay_json(advance_while_paused).is_err());
+
+    let rejected_action = r#"{
+        "schema":"combinatorial.swarmability.replay.v1",
+        "initial_seed":2026,
+        "events":[{
+            "kind":"action",
+            "action":{"type":"adjust_speed","delta":0.1,"expected_selection_revision":99}
+        }]
+    }"#;
+    assert!(DemoCore::from_replay_json(rejected_action).is_err());
+
+    let zero_steps = r#"{
+        "schema":"combinatorial.swarmability.replay.v1",
+        "initial_seed":2026,
+        "events":[{"kind":"advance_steps","steps":0}]
+    }"#;
+    assert!(DemoCore::from_replay_json(zero_steps).is_err());
+
+    let consecutive_advances = r#"{
+        "schema":"combinatorial.swarmability.replay.v1",
+        "initial_seed":2026,
+        "events":[
+            {"kind":"action","action":{"type":"start"}},
+            {"kind":"advance_steps","steps":1},
+            {"kind":"advance_steps","steps":1},
+            {"kind":"action","action":{"type":"pause"}}
+        ]
+    }"#;
+    assert!(DemoCore::from_replay_json(consecutive_advances).is_err());
+
+    let tape_ending_running = r#"{
+        "schema":"combinatorial.swarmability.replay.v1",
+        "initial_seed":2026,
+        "events":[{"kind":"action","action":{"type":"start"}}]
+    }"#;
+    assert!(DemoCore::from_replay_json(tape_ending_running).is_err());
+
+    let excessive_events = serde_json::json!({
+        "schema": "combinatorial.swarmability.replay.v1",
+        "initial_seed": 2026,
+        "events": (0..4_097)
+            .map(|_| serde_json::json!({"kind": "action", "action": {"type": "start"}}))
+            .collect::<Vec<_>>()
+    })
+    .to_string();
+    assert!(DemoCore::from_replay_json(&excessive_events).is_err());
+
+    let excessive_bytes = " ".repeat(2_000_001);
+    assert!(DemoCore::from_replay_json(&excessive_bytes).is_err());
+
+    let snapshot = DemoCore::new(2026)
+        .snapshot_json()
+        .expect("snapshot serializes");
+    let restored = DemoCore::from_snapshot_json(&snapshot).expect("snapshot restores");
+    assert!(restored.replay_json().is_err());
+    assert!(!restored.public_state().replay_available);
+
+    let mut running = DemoCore::new(2026);
+    let _ = running.dispatch(SemanticAction::Start);
+    assert!(running.replay_json().is_err());
+}
+
+#[test]
 fn matter_payload_and_frame_rows_preserve_scene_identity() {
     let core = DemoCore::new(5);
     let payload = core.render_payload().expect("Matter payload validates");

@@ -247,6 +247,12 @@ pub struct PublicState {
     pub state_revision: u64,
     /// Monotonic selection-only revision.
     pub selection_revision: u64,
+    /// Number of bounded events in the deterministic replay tape.
+    pub replay_event_count: usize,
+    /// Fixed simulation steps represented by explicit step actions and elapsed updates.
+    pub replay_step_count: u64,
+    /// Whether the current state can still be reproduced from its bounded tape.
+    pub replay_available: bool,
     /// Per-member DOM summaries.
     pub members: Vec<MemberSummary>,
 }

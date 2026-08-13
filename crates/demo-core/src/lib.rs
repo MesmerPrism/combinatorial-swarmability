@@ -2,6 +2,7 @@
 
 mod action;
 mod engine;
+mod replay;
 mod rng;
 
 pub use action::{

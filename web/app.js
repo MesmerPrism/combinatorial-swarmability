@@ -1,8 +1,10 @@
-import init, { DemoEngine } from "./pkg/demo_wasm.js?v=atlas-shell-v1";
+import init, { DemoEngine } from "./pkg/demo_wasm.js?v=history-v1";
 
 const DEFAULT_SEED = "2026";
 const SPEED_DELTA = 0.10;
 const RELATION_RADIUS_SQUARED = 0.34 * 0.34;
+const MAX_CHECKPOINTS = 5;
+const MAX_SESSION_HISTORY = 50;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const canvas = document.querySelector("#swarm-canvas");
@@ -11,6 +13,9 @@ const status = document.querySelector("#action-status");
 const controls = document.querySelector("#controls");
 const memberControls = document.querySelector("#member-controls");
 const seedInput = document.querySelector("#seed-input");
+const checkpointNameInput = document.querySelector("#checkpoint-name");
+const checkpointSelect = document.querySelector("#checkpoint-select");
+const historyEvents = document.querySelector("#history-events");
 const atlasFilters = document.querySelector("#atlas-filters");
 const atlasList = document.querySelector("#atlas-list");
 const atlasCount = document.querySelector("#atlas-count");
@@ -19,14 +24,17 @@ let engine;
 let state;
 let rows = new Float32Array();
 let catalogEntries = [];
+const savedCheckpoints = new Map();
+const sessionHistory = [];
 let selectedAtlasId = "";
+let sessionHistorySequence = 0;
 let animationHandle = 0;
 let previousTimestamp = 0;
 let reducedTimestamp = 0;
 let rowWidth = 0;
 
 await init({
-  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=atlas-shell-v1", import.meta.url),
+  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=history-v1", import.meta.url),
 });
 engine = new DemoEngine(DEFAULT_SEED);
 rowWidth = DemoEngine.frame_row_width();
@@ -123,6 +131,16 @@ function bindControls() {
     );
   });
   document.querySelector("#restart-button").addEventListener("click", restartSeed);
+  document.querySelector("#save-checkpoint-button").addEventListener("click", saveCheckpoint);
+  document.querySelector("#retrieve-checkpoint-button").addEventListener("click", retrieveCheckpoint);
+  document.querySelector("#replay-button").addEventListener("click", replayCurrentRun);
+  checkpointSelect.addEventListener("change", () => {
+    const checkpoint = savedCheckpoints.get(checkpointSelect.value);
+    if (checkpoint) {
+      checkpointNameInput.value = checkpoint.name;
+    }
+    updateHistoryControls();
+  });
 
   controls.querySelectorAll('input[name="scope"]').forEach((input) => {
     input.addEventListener("click", (event) => {
@@ -206,6 +224,133 @@ function setBehavior(behavior, trace) {
   }, trace);
 }
 
+function saveCheckpoint(event) {
+  const name = checkpointNameInput.value.trim();
+  const trace = interactionTrace(
+    event,
+    "history.save",
+    "Session-local memory only; saving pauses motion and changes no target authority"
+  );
+  if (!validCheckpointName(name)) {
+    updateInfrastructureTrace(trace, { type: "save_state" }, "checkpoint_name_invalid", false, "name rejected");
+    announce("Checkpoint name must contain 1–32 visible characters.", true);
+    checkpointNameInput.focus();
+    return;
+  }
+  if (!savedCheckpoints.has(name) && savedCheckpoints.size >= MAX_CHECKPOINTS) {
+    updateInfrastructureTrace(trace, { type: "save_state", name }, "checkpoint_limit_reached", false, "5 of 5 saved");
+    announce("Five checkpoints are already saved. Reuse an existing name to overwrite it.", true);
+    checkpointNameInput.focus();
+    return;
+  }
+  if (!pauseForHistory(event, "history.save")) {
+    return;
+  }
+  try {
+    const checkpoint = {
+      name,
+      replay: engine.replay_json(),
+      seed: state.seed,
+      tick: state.tick,
+      eventCount: state.replay_event_count,
+      stepCount: state.replay_step_count,
+    };
+    const overwritten = savedCheckpoints.has(name);
+    savedCheckpoints.set(name, checkpoint);
+    renderCheckpointOptions(name);
+    updateInfrastructureTrace(
+      trace,
+      { type: "save_state", name },
+      overwritten ? "checkpoint_overwritten" : "checkpoint_saved",
+      true,
+      `${checkpoint.eventCount} events, ${checkpoint.stepCount} steps, tick ${checkpoint.tick}`
+    );
+    announce(`${overwritten ? "Updated" : "Saved"} ${name} at tick ${checkpoint.tick}.`);
+  } catch {
+    updateInfrastructureTrace(trace, { type: "save_state", name }, "replay_unavailable", false, "tape export rejected");
+    announce("This run can no longer be saved as a bounded replay.", true);
+  }
+}
+
+function retrieveCheckpoint(event) {
+  const checkpoint = savedCheckpoints.get(checkpointSelect.value);
+  const trace = interactionTrace(
+    event,
+    "history.retrieve",
+    "Replace the active deterministic core from one session-local saved tape"
+  );
+  if (!checkpoint) {
+    updateInfrastructureTrace(trace, { type: "retrieve_state" }, "checkpoint_missing", false, "no saved selection");
+    announce("Choose a saved checkpoint before retrieving it.", true);
+    checkpointSelect.focus();
+    return;
+  }
+  if (!pauseForHistory(event, "history.retrieve")) {
+    return;
+  }
+  try {
+    engine.load_replay_json(checkpoint.replay);
+    previousTimestamp = 0;
+    reducedTimestamp = 0;
+    refreshAll();
+    updateInfrastructureTrace(
+      trace,
+      { type: "retrieve_state", name: checkpoint.name },
+      "checkpoint_retrieved",
+      true,
+      `${state.replay_event_count} events, tick ${state.tick}`
+    );
+    announce(`Retrieved ${checkpoint.name} at tick ${state.tick}.`);
+  } catch {
+    updateInfrastructureTrace(trace, { type: "retrieve_state", name: checkpoint.name }, "checkpoint_damaged", false, "tape rejected");
+    announce("The saved checkpoint failed strict replay validation.", true);
+  }
+}
+
+function replayCurrentRun(event) {
+  const trace = interactionTrace(
+    event,
+    "history.replay",
+    "Reconstruct the active state from its initial seed, semantic actions, and fixed-step counts"
+  );
+  if (!pauseForHistory(event, "history.replay")) {
+    return;
+  }
+  try {
+    const replay = engine.replay_json();
+    engine.load_replay_json(replay);
+    previousTimestamp = 0;
+    reducedTimestamp = 0;
+    refreshAll();
+    updateInfrastructureTrace(
+      trace,
+      { type: "replay_actions" },
+      "replay_completed",
+      true,
+      `${state.replay_event_count} events, ${state.replay_step_count} steps, tick ${state.tick}`
+    );
+    announce(`Replayed ${state.replay_event_count} events to tick ${state.tick}.`);
+  } catch {
+    updateInfrastructureTrace(trace, { type: "replay_actions" }, "replay_rejected", false, "tape rejected");
+    announce("The current run failed strict replay validation.", true);
+  }
+}
+
+function pauseForHistory(event, operation) {
+  if (!state.running) {
+    return true;
+  }
+  const receipt = dispatch(
+    { type: "pause" },
+    interactionTrace(event, `${operation}.pause`, "Pause before capturing or replacing deterministic state")
+  );
+  return receipt?.accepted === true;
+}
+
+function validCheckpointName(name) {
+  return name.length >= 1 && name.length <= 32 && !/[\u0000-\u001f\u007f]/.test(name);
+}
+
 function restartSeed(event) {
   const seed = seedInput.value.trim();
   if (!/^\d{1,20}$/.test(seed)) {
@@ -219,10 +364,12 @@ function restartSeed(event) {
     previousTimestamp = 0;
     reducedTimestamp = 0;
     refreshAll();
-    updateActionTrace(
+    updateInfrastructureTrace(
       interactionTrace(event, `history.restart-seed(${seed})`, "Whole-scene restart with deterministic seed"),
       { type: "restart_seed" },
-      { accepted: true, code: "seed_restarted", state_revision: state.state_revision, selection_revision: state.selection_revision }
+      "seed_restarted",
+      true,
+      `state ${state.state_revision}, selection ${state.selection_revision}`
     );
     announce(`Restarted with seed ${seed}. Motion is paused.`);
   } catch {
@@ -238,8 +385,10 @@ function dispatch(action, trace = {}) {
     updateActionTrace(trace, action, receipt);
     announce(receipt.summary, !receipt.accepted);
     syncAnimation();
+    return receipt;
   } catch {
     announce("The action could not be applied safely.", true);
+    return null;
   }
 }
 
@@ -247,11 +396,60 @@ function updateActionTrace(trace, action, receipt) {
   const policy = trace.policy || `${scopeLabel(state.scope)} → ${memberList(state.target_members)}`;
   const accepted = receipt.accepted ? "accepted" : "rejected";
   const revision = `state ${receipt.state_revision}, selection ${receipt.selection_revision}`;
+  renderActionTrace(
+    { ...trace, policy },
+    semanticActionLabel(action),
+    `${receipt.code} · ${accepted} · ${revision}`
+  );
+}
+
+function updateInfrastructureTrace(trace, action, code, accepted, detail) {
+  renderActionTrace(
+    trace,
+    semanticActionLabel(action),
+    `${code} · ${accepted ? "accepted" : "rejected"} · ${detail}`
+  );
+}
+
+function renderActionTrace(trace, semanticAction, receipt) {
   document.querySelector("#trace-input-route").textContent = trace.inputRoute || "browser control";
-  document.querySelector("#trace-normalized-input").textContent = trace.normalizedInput || action.type;
-  document.querySelector("#trace-semantic-action").textContent = semanticActionLabel(action);
-  document.querySelector("#trace-policy").textContent = policy;
-  document.querySelector("#trace-receipt").textContent = `${receipt.code} · ${accepted} · ${revision}`;
+  document.querySelector("#trace-normalized-input").textContent = trace.normalizedInput || semanticAction;
+  document.querySelector("#trace-semantic-action").textContent = semanticAction;
+  document.querySelector("#trace-policy").textContent = trace.policy || "No target policy change";
+  document.querySelector("#trace-receipt").textContent = receipt;
+  appendSessionHistory(trace, semanticAction, receipt);
+}
+
+function appendSessionHistory(trace, semanticAction, receipt) {
+  sessionHistorySequence += 1;
+  sessionHistory.push({
+    sequence: sessionHistorySequence,
+    semanticAction,
+    route: trace.inputRoute || "browser control",
+    normalizedInput: trace.normalizedInput || semanticAction,
+    policy: trace.policy || "No target policy change",
+    receipt,
+  });
+  if (sessionHistory.length > MAX_SESSION_HISTORY) {
+    sessionHistory.shift();
+  }
+  renderSessionHistory();
+}
+
+function renderSessionHistory() {
+  const fragment = document.createDocumentFragment();
+  sessionHistory.forEach((entry) => {
+    const item = document.createElement("li");
+    const action = document.createElement("strong");
+    const provenance = document.createElement("span");
+    const policy = document.createElement("span");
+    action.textContent = `${entry.sequence}. ${entry.semanticAction}`;
+    provenance.textContent = `${entry.route} · ${entry.normalizedInput} · ${entry.receipt}`;
+    policy.textContent = entry.policy;
+    item.append(action, provenance, policy);
+    fragment.append(item);
+  });
+  historyEvents.replaceChildren(fragment);
 }
 
 function semanticActionLabel(action) {
@@ -322,6 +520,9 @@ function updateDomState(updateControls = true) {
   document.querySelector("#state-speed").textContent = state.average_speed.toFixed(3);
   document.querySelector("#state-behaviors").textContent = behaviorMixLabel();
   document.querySelector("#state-relations").textContent = String(relationTotal);
+  document.querySelector("#state-replay-events").textContent =
+    `${state.replay_event_count} events / ${state.replay_step_count} steps`;
+  document.querySelector("#state-checkpoint-count").textContent = `${savedCheckpoints.size} of ${MAX_CHECKPOINTS}`;
   document.querySelector("#metric-cohesion").textContent = metrics.cohesion.toFixed(3);
   document.querySelector("#metric-polarization").textContent = metrics.polarization.toFixed(3);
   document.querySelector("#metric-spacing").textContent = metrics.nearestSpacing.toFixed(3);
@@ -331,6 +532,7 @@ function updateDomState(updateControls = true) {
   document.querySelector("#step-button").disabled = state.running;
   document.querySelector("#start-button").disabled = state.running;
   document.querySelector("#pause-button").disabled = !state.running;
+  updateHistoryControls();
   canvas.setAttribute(
     "aria-label",
     `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}.`
@@ -344,6 +546,30 @@ function updateDomState(updateControls = true) {
     }
     seedInput.value = state.seed;
   }
+}
+
+function renderCheckpointOptions(selectedName = checkpointSelect.value) {
+  const fragment = document.createDocumentFragment();
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = savedCheckpoints.size === 0 ? "No saved checkpoints" : "Choose a checkpoint";
+  fragment.append(empty);
+  savedCheckpoints.forEach((checkpoint) => {
+    const option = document.createElement("option");
+    option.value = checkpoint.name;
+    option.textContent = `${checkpoint.name} · seed ${checkpoint.seed} · tick ${checkpoint.tick}`;
+    fragment.append(option);
+  });
+  checkpointSelect.replaceChildren(fragment);
+  checkpointSelect.value = savedCheckpoints.has(selectedName) ? selectedName : "";
+  updateHistoryControls();
+}
+
+function updateHistoryControls() {
+  document.querySelector("#retrieve-checkpoint-button").disabled = !savedCheckpoints.has(checkpointSelect.value);
+  document.querySelector("#replay-button").disabled =
+    !state?.replay_available || state.replay_event_count === 0;
+  document.querySelector("#state-checkpoint-count").textContent = `${savedCheckpoints.size} of ${MAX_CHECKPOINTS}`;
 }
 
 function outcomeMetrics() {

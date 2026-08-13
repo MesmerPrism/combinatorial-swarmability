@@ -13,6 +13,11 @@ renderer-neutral `ParticleRenderPayload`; a thin WebAssembly adapter exposes a
 bounded frame buffer to a Canvas2D renderer. The canvas is not the only
 information or interaction surface.
 
+Atlas-wide history infrastructure records accepted semantic actions and actual
+fixed simulation steps in a strict bounded replay tape. Five named checkpoints
+can be saved and retrieved within the current browser tab; reset and replay use
+the same core rather than a duplicate browser simulation.
+
 This is a reconstruction and research instrument, not an implementation by the
 authors of any cited work and not a universal interaction vocabulary. Its
 versioned public catalogue keeps source reports, evidence maturity, transfer

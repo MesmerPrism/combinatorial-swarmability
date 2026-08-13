@@ -71,6 +71,29 @@ impl DemoEngine {
             .map_err(|_| JsValue::from_str("State summary could not be serialized."))
     }
 
+    /// Returns the strict bounded deterministic replay tape.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized JavaScript error when replay is unavailable.
+    pub fn replay_json(&self) -> Result<String, JsValue> {
+        self.core
+            .replay_json()
+            .map_err(|_| JsValue::from_str("Replay recording is unavailable."))
+    }
+
+    /// Replaces the active core with the state reconstructed from a replay tape.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized JavaScript error when the tape is invalid or damaged.
+    pub fn load_replay_json(&mut self, replay_json: &str) -> Result<(), JsValue> {
+        let restored = DemoCore::from_replay_json(replay_json)
+            .map_err(|_| JsValue::from_str("Replay recording is invalid."))?;
+        self.core = restored;
+        Ok(())
+    }
+
     /// Returns the fixed scene member count.
     #[must_use]
     pub fn member_count() -> usize {
