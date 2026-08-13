@@ -1,6 +1,6 @@
 {
   "schema": "combinatorial.swarmability.public.catalog.export-profile.v1",
-  "export_version": "2026-08-13.5",
+  "export_version": "2026-08-13.6",
   "expected_source_sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
   "expected_source_row_count": 26,
   "generated_on": "2026-08-13",
@@ -81,10 +81,10 @@
       "source_id": "cs-source-kim-et-al-2020-user-defined-swarm-control",
       "control_family": "morphology-lifecycle",
       "public_id": "split-merge-and-rescale",
-      "summary": "Reconstruct discrete changes to subgroup structure and formation scale.",
-      "status": "planned-reconstruction",
+      "summary": "Reconstruct deterministic split and merge operations over explicit canonical member groups, plus an independently bounded formation-scale target.",
+      "status": "implemented-reconstruction",
       "semantic_actions": ["split_group", "merge_groups", "set_formation_scale"],
-      "does_not_claim": "This reconstruction does not establish implemented morphology control in the source, multi-user governance, or universal gestures.",
+      "does_not_claim": "These deterministic partition, canonical-identity, and formation-scale rules are app-owned; this reconstruction does not establish implemented morphology control in the source, multi-user governance, validated accessibility, or universal gestures.",
       "facets": {
         "input_routes": ["gesture", "touch", "speech", "multimodal"],
         "control_families": ["morphology-lifecycle"],

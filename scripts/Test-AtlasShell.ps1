@@ -170,7 +170,8 @@ $expectedImplementedIds = @(
     'raw-dynamics-parameters',
     'save-retrieve-reset-replay',
     'scope-and-granularity',
-    'semantic-laban-dynamics'
+    'semantic-laban-dynamics',
+    'split-merge-and-rescale'
 )
 if (($implementedIds -join "`n") -ne ($expectedImplementedIds -join "`n")) {
     throw "The atlas implemented set differs from the accepted mechanism slices: $($implementedIds -join ', ')"
@@ -185,4 +186,4 @@ foreach ($item in @($catalog.items)) {
     }
 }
 
-Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, and five bound reconstructions.'
+Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, and six bound reconstructions.'
