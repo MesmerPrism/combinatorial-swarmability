@@ -688,6 +688,27 @@ canvas {
   accent-color: var(--accent);
 }
 
+.dynamics-flow {
+  margin-top: 0.9rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--surface);
+  font-family: var(--font-ui);
+  font-size: 0.86rem;
+}
+
+.dynamics-flow h4,
+.dynamics-flow p,
+.dynamics-flow ul {
+  margin-top: 0;
+}
+
+.dynamics-flow p:last-child,
+.dynamics-flow ul:last-child {
+  margin-bottom: 0;
+}
+
 #place-field-button {
   width: 100%;
   margin: 0.35rem 0 0.8rem;

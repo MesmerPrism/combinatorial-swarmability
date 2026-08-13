@@ -174,6 +174,6 @@ actions and payloads, not DOM or Canvas code.
 
 ## Next slice
 
-Bind the raw-dynamics catalogue entry only after its mechanism gates pass,
-then continue with semantic/Laban dynamics. Optics integration,
+Continue with semantic/Laban dynamics while keeping it a distinct semantic
+mapping over inspectable raw rates. Optics integration,
 multi-user authority, and Quest adaptation remain separate later decisions.

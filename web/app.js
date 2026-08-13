@@ -723,6 +723,11 @@ function updateDomState(updateControls = true) {
   document.querySelector("#metric-subgroup").textContent = String(state.subgroup_members.length);
   document.querySelector("#metric-distribution").textContent =
     `${state.behavior_counts.flock} / ${state.behavior_counts.cohere} / ${state.behavior_counts.disperse}`;
+  document.querySelector("#flow-alignment-rate").textContent = state.dynamics_rates.alignment.toFixed(2);
+  document.querySelector("#flow-cohesion-rate").textContent = state.dynamics_rates.cohesion.toFixed(2);
+  document.querySelector("#flow-separation-rate").textContent = state.dynamics_rates.separation.toFixed(2);
+  document.querySelector("#flow-distribution").textContent =
+    `${state.behavior_counts.flock} / ${state.behavior_counts.cohere} / ${state.behavior_counts.disperse}`;
   document.querySelector("#metric-relations").textContent = String(relationTotal);
   document.querySelector("#metric-fields").textContent = String(state.fields.length);
   document.querySelector("#step-button").disabled = state.running;

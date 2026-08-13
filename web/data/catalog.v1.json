@@ -1,12 +1,12 @@
 {
   "schema": "combinatorial.swarmability.public.catalog.v1",
-  "export_version": "2026-08-13.3",
+  "export_version": "2026-08-13.4",
   "source_binding": {
     "authority": "research-memory",
     "sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
     "row_count": 26,
     "schema_sha256": "393344ead11abeaba854a80f08abc484c4f8ce6d983d5a4d058abca6b4e180a9",
-    "profile_sha256": "f2332c192961b3ce7be3808c209baeef8a4388ea462e7154ba9698de46ebf248"
+    "profile_sha256": "40f6e9e586991c4ed4d9dad36aa80bf4ef6453c0f8bab7d58d0bb4ae28f09f00"
   },
   "items": [
     {
@@ -187,18 +187,17 @@
         "substrate": "robotic"
       },
       "reconstruction": {
-        "status": "planned-reconstruction",
-        "summary": "Reconstruct direct adjustment of labelled controller parameters and expose the resulting state distribution.",
+        "status": "implemented-reconstruction",
+        "summary": "Reconstruct app-owned rates for entering Flock, Cohere, and Disperse modes, and expose their distribution and metrics as a technical analogy.",
         "interaction": "move labelled state-transition sliders while a state-flow diagram remains visible",
         "effect": "the proportions of agents occupying exploration task or other states change over time",
         "semantic_actions": [
           "set_alignment",
           "set_cohesion",
-          "set_separation",
-          "set_randomness"
+          "set_separation"
         ],
         "transfer_boundary": "technical plausibility only; no completed usability fairness or shared-authorship evaluation",
-        "does_not_claim": "This reconstruction demonstrates technical parameter effects, not evaluated usability, fairness, or shared authorship."
+        "does_not_claim": "This reconstruction does not reproduce the source's exploration, task, or other robot-state model or instrument, and demonstrates technical parameter effects rather than evaluated usability, fairness, or shared authorship."
       },
       "facets": {
         "input_routes": [

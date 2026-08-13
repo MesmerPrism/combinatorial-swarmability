@@ -43,9 +43,8 @@
           <h2 id="atlas-title">Atlas entries</h2>
           <p>
             Filter the public catalogue, then inspect what a source reports and what
-            this atlas reconstructs. Scope, additive personal fields, and
-            deterministic history are bound; raw dynamics controls are
-            available while their atlas card remains planned.
+            this atlas reconstructs. Scope, additive personal fields, raw
+            dynamics, and deterministic history are interactive in this slice.
           </p>
         </div>
 
@@ -323,6 +322,16 @@
                 <label for="dynamics-separation">Separation / enter Disperse <output id="dynamics-separation-value" for="dynamics-separation">0.00</output></label>
                 <input id="dynamics-separation" name="dynamics-separation" type="range" min="0" max="1" step="0.05" value="0">
               </div>
+              <section class="dynamics-flow" aria-labelledby="dynamics-flow-title">
+                <h4 id="dynamics-flow-title">App-owned state-flow diagram</h4>
+                <p>At each fixed step, any member's current mode can enter one of three existing modes:</p>
+                <ul>
+                  <li>Any mode → Flock at alignment rate <strong id="flow-alignment-rate">0.00</strong></li>
+                  <li>Any mode → Cohere at cohesion rate <strong id="flow-cohesion-rate">0.00</strong></li>
+                  <li>Any mode → Disperse at separation rate <strong id="flow-separation-rate">0.00</strong></li>
+                </ul>
+                <p>Current Flock / Cohere / Disperse distribution: <strong id="flow-distribution">24 / 0 / 0</strong></p>
+              </section>
             </fieldset>
 
             <fieldset>

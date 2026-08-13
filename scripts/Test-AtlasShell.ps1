@@ -28,7 +28,9 @@ $requiredIds = @(
     'place-field-button', 'move-field-button', 'polarity-field-button',
     'remove-field-button', 'state-dynamics-rates', 'metric-distribution',
     'dynamics-alignment', 'dynamics-alignment-value', 'dynamics-cohesion',
-    'dynamics-cohesion-value', 'dynamics-separation', 'dynamics-separation-value'
+    'dynamics-cohesion-value', 'dynamics-separation', 'dynamics-separation-value',
+    'dynamics-flow-title', 'flow-alignment-rate', 'flow-cohesion-rate',
+    'flow-separation-rate', 'flow-distribution'
 )
 foreach ($id in $requiredIds) {
     if ($html -notmatch "id=[`"']$([regex]::Escape($id))[`"']") {
@@ -111,6 +113,7 @@ $implemented = @($catalog.items | Where-Object { $_.reconstruction.status -eq 'i
 $implementedIds = @($implemented.public_id | Sort-Object)
 $expectedImplementedIds = @(
     'additive-personal-fields',
+    'raw-dynamics-parameters',
     'save-retrieve-reset-replay',
     'scope-and-granularity'
 )
@@ -127,4 +130,4 @@ foreach ($item in @($catalog.items)) {
     }
 }
 
-Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, three bound reconstructions, and bounded raw dynamics controls.'
+Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, and four bound reconstructions.'

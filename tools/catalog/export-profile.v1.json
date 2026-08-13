@@ -1,6 +1,6 @@
 {
   "schema": "combinatorial.swarmability.public.catalog.export-profile.v1",
-  "export_version": "2026-08-13.3",
+  "export_version": "2026-08-13.4",
   "expected_source_sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
   "expected_source_row_count": 26,
   "generated_on": "2026-08-13",
@@ -45,10 +45,10 @@
       "source_id": "cs-source-crandall-et-al-2017-human-swarm-shared-control",
       "control_family": "endogenous-dynamics",
       "public_id": "raw-dynamics-parameters",
-      "summary": "Reconstruct direct adjustment of labelled controller parameters and expose the resulting state distribution.",
-      "status": "planned-reconstruction",
-      "semantic_actions": ["set_alignment", "set_cohesion", "set_separation", "set_randomness"],
-      "does_not_claim": "This reconstruction demonstrates technical parameter effects, not evaluated usability, fairness, or shared authorship.",
+      "summary": "Reconstruct app-owned rates for entering Flock, Cohere, and Disperse modes, and expose their distribution and metrics as a technical analogy.",
+      "status": "implemented-reconstruction",
+      "semantic_actions": ["set_alignment", "set_cohesion", "set_separation"],
+      "does_not_claim": "This reconstruction does not reproduce the source's exploration, task, or other robot-state model or instrument, and demonstrates technical parameter effects rather than evaluated usability, fairness, or shared authorship.",
       "facets": {
         "input_routes": ["parameter-interface"],
         "control_families": ["endogenous-dynamics"],
