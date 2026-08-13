@@ -37,18 +37,10 @@ if ($violations.Count -gt 0) {
 
 $publicDataRoot = Join-Path $repoRoot 'web/data'
 $publicDataFiles = @(Get-ChildItem -LiteralPath $publicDataRoot -File -Recurse)
-if ($publicDataFiles.Count -ne 1 -or $publicDataFiles[0].Name -ne 'catalog.synthetic.json') {
-    throw 'The public data directory must contain only catalog.synthetic.json before the first reviewed export.'
+if ($publicDataFiles.Count -ne 1 -or $publicDataFiles[0].Name -ne 'catalog.v1.json') {
+    throw 'The public data directory must contain exactly the versioned public catalogue.'
 }
-$catalog = Get-Content -LiteralPath $publicDataFiles[0].FullName -Raw | ConvertFrom-Json
-if ($catalog.export_status -ne 'synthetic_fixture') {
-    throw 'The public catalog is not marked as a synthetic fixture.'
-}
-foreach ($item in @($catalog.items)) {
-    if ($null -ne $item.paper_url -or $null -ne $item.artifact_url -or $null -ne $item.checked_date) {
-        throw 'Synthetic catalog entries must not carry unpublished research links or checked dates.'
-    }
-}
+& (Join-Path $PSScriptRoot 'Test-PublicCatalog.ps1')
 
 $forbiddenData = @(Get-ChildItem -LiteralPath $repoRoot -File -Recurse | Where-Object {
     $_.FullName -notlike "$(Join-Path $repoRoot 'target')*" -and
@@ -75,4 +67,4 @@ if ($pagesWorkflow -notmatch '(?m)^\s{2}workflow_dispatch:\s*$' -or
     throw 'The Pages workflow must remain manual-only until the publication checkpoint is approved.'
 }
 
-Write-Host 'Public-boundary scan passed: synthetic fixture only; no private paths, protected filenames, credentials, or export-like data files found.'
+Write-Host 'Public-boundary scan passed: versioned allowlisted catalogue only; no private paths, protected filenames, credentials, or unexpected export-like data files found.'

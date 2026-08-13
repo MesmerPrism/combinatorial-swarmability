@@ -1,0 +1,512 @@
+{
+  "schema": "combinatorial.swarmability.public.catalog.v1",
+  "export_version": "2026-08-13.1",
+  "source_binding": {
+    "authority": "research-memory",
+    "sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
+    "row_count": 26,
+    "schema_sha256": "393344ead11abeaba854a80f08abc484c4f8ce6d983d5a4d058abca6b4e180a9",
+    "profile_sha256": "2292712d8d5799ff556b73d4cb467fd272d5e1331c9b630d4478ed23b221afd4"
+  },
+  "items": [
+    {
+      "public_id": "scope-and-granularity",
+      "display_order": 30,
+      "title": "Address one robot a group or the whole swarm",
+      "source": {
+        "source_id": "cs-source-kim-et-al-2020-user-defined-swarm-control",
+        "system_or_study": "Kim user-defined swarm control",
+        "year": 2020,
+        "paper_url": "https://doi.org/10.1145/3313831.3376814",
+        "project_url": null,
+        "artifact_url": "https://drl.ece.utah.edu/wp-content/uploads/sites/155/2021/07/kim-chi2020.pdf",
+        "source_locus": "referents and elicited interaction set",
+        "evidence_kind": "empirical-user-study",
+        "literature_status": "evaluated-elicitation",
+        "catalog_projection_status": "verified-projection",
+        "checked_on": "2026-07-25"
+      },
+      "reported": {
+        "input_expression": "gesture touch speech or combinations",
+        "input_routes": "participant-defined multimodal expressions",
+        "user_action": "select an individual group or whole swarm then indicate motion speed or scale",
+        "semantic_action": "select and move at chosen granularity",
+        "control_family": "exogenous-target-or-trajectory",
+        "controlled_quantity": "group motion; speed; selection; formation scale",
+        "parameter_exposure": "direct-semantic",
+        "target_scope": "individual; group; whole swarm",
+        "temporal_mode": "discrete and continuous elicited commands",
+        "human_configuration": "single-user",
+        "multi_user_combination": "no multi-user combination",
+        "substrate": "robotic"
+      },
+      "reconstruction": {
+        "status": "implemented-reconstruction",
+        "summary": "Reconstruct target scope as a policy decision that remains separate from the physical input route.",
+        "interaction": "toggle member group and all scopes then issue the same move or speed command",
+        "effect": "identical semantic commands affect different population scopes",
+        "semantic_actions": [
+          "select_member",
+          "set_scope",
+          "set_collective_behavior",
+          "adjust_preferred_speed"
+        ],
+        "transfer_boundary": "elicited mappings are contextual and do not establish an implemented universal vocabulary or ability-diverse usability",
+        "does_not_claim": "This reconstruction does not reproduce the elicited gestures or establish a universal or ability-diverse interaction vocabulary."
+      },
+      "facets": {
+        "input_routes": [
+          "gesture",
+          "touch",
+          "speech",
+          "multimodal"
+        ],
+        "control_families": [
+          "exogenous-target-or-trajectory"
+        ],
+        "scopes": [
+          "member",
+          "subgroup",
+          "swarm"
+        ],
+        "temporal_modes": [
+          "discrete",
+          "continuous"
+        ],
+        "multi_user_policies": [
+          "single-user"
+        ],
+        "substrates": [
+          "robotic"
+        ],
+        "evidence_statuses": [
+          "evaluated-elicitation"
+        ]
+      }
+    },
+    {
+      "public_id": "additive-personal-fields",
+      "display_order": 70,
+      "title": "Superimpose embodied gravity fields",
+      "source": {
+        "source_id": "cs-source-lee-2021-entangled",
+        "system_or_study": "Entangled",
+        "year": 2021,
+        "paper_url": "https://doi.org/10.21428/92fbeb44.eae7c23f",
+        "project_url": null,
+        "artifact_url": null,
+        "source_locus": "implementation and up-to-eight-player demonstration",
+        "evidence_kind": "technical-demonstration",
+        "literature_status": "implemented-demonstration",
+        "catalog_projection_status": "verified-projection",
+        "checked_on": "2026-07-25"
+      },
+      "reported": {
+        "input_expression": "smartphone motion and spiral gesture through a web interface",
+        "input_routes": "continuous device motion plus persistent gesture event",
+        "user_action": "move the phone to exert gravity or draw a spiral to place a persistent point",
+        "semantic_action": "apply gravitational attractor or repellent field",
+        "control_family": "exogenous-environment-or-field",
+        "controlled_quantity": "gravitational forces and persistent attractors or repellents",
+        "parameter_exposure": "direct-semantic",
+        "target_scope": "spatial field",
+        "temporal_mode": "continuous and persistent runtime",
+        "human_configuration": "multi-user",
+        "multi_user_combination": "field superposition from up to eight players",
+        "substrate": "digital"
+      },
+      "reconstruction": {
+        "status": "planned-reconstruction",
+        "summary": "Reconstruct additive personal attractor and repellent fields while retaining contributor provenance.",
+        "interaction": "drag or tilt a personal field source and click to leave persistent attractors or repellents",
+        "effect": "particle trajectories bend under the additive fields and retain visible contributor colours",
+        "semantic_actions": [
+          "place_field",
+          "move_field",
+          "set_field_polarity"
+        ],
+        "transfer_boundary": "no statistical user study fairness accessibility agency or optimal overlap policy",
+        "does_not_claim": "This reconstruction does not reproduce the original instrument or establish fairness, accessibility, agency, or an optimal overlap policy."
+      },
+      "facets": {
+        "input_routes": [
+          "device-motion",
+          "gesture"
+        ],
+        "control_families": [
+          "exogenous-environment-or-field"
+        ],
+        "scopes": [
+          "field"
+        ],
+        "temporal_modes": [
+          "continuous",
+          "persistent"
+        ],
+        "multi_user_policies": [
+          "superposition"
+        ],
+        "substrates": [
+          "digital"
+        ],
+        "evidence_statuses": [
+          "implemented-demonstration"
+        ]
+      }
+    },
+    {
+      "public_id": "raw-dynamics-parameters",
+      "display_order": 150,
+      "title": "Adjust transition rates inside the swarm controller",
+      "source": {
+        "source_id": "cs-source-crandall-et-al-2017-human-swarm-shared-control",
+        "system_or_study": "Crandall hub-based shared-control interface",
+        "year": 2017,
+        "paper_url": "https://doi.org/10.1007/978-3-319-58472-0_21",
+        "project_url": null,
+        "artifact_url": "https://faculty.cs.byu.edu/~crandall/papers/CrandallSwarmHCII2017.pdf",
+        "source_locus": "Tables 2 and 4 and Section 4.2",
+        "evidence_kind": "technical-demonstration",
+        "literature_status": "described-technical-mechanism",
+        "catalog_projection_status": "verified-projection",
+        "checked_on": "2026-07-25"
+      },
+      "reported": {
+        "input_expression": "hub-based parameter interface",
+        "input_routes": "exact physical device not reported in the source note",
+        "user_action": "adjust rates governing transitions among robot states",
+        "semantic_action": "set endogenous controller rates",
+        "control_family": "endogenous-dynamics",
+        "controlled_quantity": "rates of transitions among robot states",
+        "parameter_exposure": "direct-semantic",
+        "target_scope": "global swarm",
+        "temporal_mode": "continuous runtime",
+        "human_configuration": "single-user",
+        "multi_user_combination": "no multi-user combination",
+        "substrate": "robotic"
+      },
+      "reconstruction": {
+        "status": "planned-reconstruction",
+        "summary": "Reconstruct direct adjustment of labelled controller parameters and expose the resulting state distribution.",
+        "interaction": "move labelled state-transition sliders while a state-flow diagram remains visible",
+        "effect": "the proportions of agents occupying exploration task or other states change over time",
+        "semantic_actions": [
+          "set_alignment",
+          "set_cohesion",
+          "set_separation",
+          "set_randomness"
+        ],
+        "transfer_boundary": "technical plausibility only; no completed usability fairness or shared-authorship evaluation",
+        "does_not_claim": "This reconstruction demonstrates technical parameter effects, not evaluated usability, fairness, or shared authorship."
+      },
+      "facets": {
+        "input_routes": [
+          "parameter-interface"
+        ],
+        "control_families": [
+          "endogenous-dynamics"
+        ],
+        "scopes": [
+          "swarm"
+        ],
+        "temporal_modes": [
+          "continuous"
+        ],
+        "multi_user_policies": [
+          "single-user"
+        ],
+        "substrates": [
+          "robotic"
+        ],
+        "evidence_statuses": [
+          "described-technical-mechanism"
+        ]
+      }
+    },
+    {
+      "public_id": "semantic-laban-dynamics",
+      "display_order": 200,
+      "title": "Translate Laban movement qualities into swarm dynamics",
+      "source": {
+        "source_id": "cs-source-gobec-et-al-2026-dancing-swarm",
+        "system_or_study": "The Dancing Swarm",
+        "year": 2026,
+        "paper_url": "https://dl.acm.org/doi/10.1145/3776734.3794497",
+        "project_url": "https://research.vu.nl/en/publications/the-dancing-swarm-using-laban-effort-parameters-for-generating-ex/",
+        "artifact_url": "https://github.com/zjgb/AKOBxSiouxThesis",
+        "source_locus": "Sections 3-6 and Figures 4-6",
+        "evidence_kind": "empirical-user-study",
+        "literature_status": "evaluated-perception-only",
+        "catalog_projection_status": "verified-projection",
+        "checked_on": "2026-07-25"
+      },
+      "reported": {
+        "input_expression": "described camera and MediaPipe body-pose pipeline; reported study used pre-rendered clips",
+        "input_routes": "TouchDesigner sliders expose 0-1 semantic dimensions",
+        "user_action": "move or set Space Time Weight and Flow qualities",
+        "semantic_action": "translate expressive qualities into coupled motion parameters",
+        "control_family": "semantic-dynamics",
+        "controlled_quantity": "Laban Space; Time; Weight; Flow mapped to alignment; separation; cohesion; speed; randomness; damping; jitter",
+        "parameter_exposure": "aggregated-mapped",
+        "target_scope": "global particle swarm",
+        "temporal_mode": "continuous runtime",
+        "human_configuration": "single-user",
+        "multi_user_combination": "no multi-user combination",
+        "substrate": "digital"
+      },
+      "reconstruction": {
+        "status": "planned-reconstruction",
+        "summary": "Reconstruct semantically labelled movement qualities as inspectable combinations of raw swarm parameters.",
+        "interaction": "use semantic sliders with an expandable panel showing every raw parameter change",
+        "effect": "particles visibly change trajectory speed compactness randomness damping and jitter",
+        "semantic_actions": [
+          "set_space_quality",
+          "set_time_quality",
+          "set_weight_quality",
+          "set_flow_quality"
+        ],
+        "transfer_boundary": "recognition was evaluated on rendered clips; live input multi-user combination accessibility agency and authorship were not evaluated",
+        "does_not_claim": "This reconstruction does not reproduce the live body pipeline; the reported evaluation used rendered clips and did not evaluate multi-user control, accessibility, agency, or authorship."
+      },
+      "facets": {
+        "input_routes": [
+          "camera-pose",
+          "slider"
+        ],
+        "control_families": [
+          "semantic-dynamics"
+        ],
+        "scopes": [
+          "swarm"
+        ],
+        "temporal_modes": [
+          "continuous"
+        ],
+        "multi_user_policies": [
+          "single-user"
+        ],
+        "substrates": [
+          "digital"
+        ],
+        "evidence_statuses": [
+          "evaluated-perception-only"
+        ]
+      }
+    },
+    {
+      "public_id": "split-merge-and-rescale",
+      "display_order": 210,
+      "title": "Split merge and rescale a swarm",
+      "source": {
+        "source_id": "cs-source-kim-et-al-2020-user-defined-swarm-control",
+        "system_or_study": "Kim user-defined swarm control",
+        "year": 2020,
+        "paper_url": "https://doi.org/10.1145/3313831.3376814",
+        "project_url": null,
+        "artifact_url": "https://drl.ece.utah.edu/wp-content/uploads/sites/155/2021/07/kim-chi2020.pdf",
+        "source_locus": "referents and elicited interaction set",
+        "evidence_kind": "empirical-user-study",
+        "literature_status": "evaluated-elicitation",
+        "catalog_projection_status": "verified-projection",
+        "checked_on": "2026-07-25"
+      },
+      "reported": {
+        "input_expression": "gesture touch speech or combinations",
+        "input_routes": "participant-defined multimodal expressions",
+        "user_action": "indicate split merge or formation-size change",
+        "semantic_action": "transform group structure or scale",
+        "control_family": "morphology-lifecycle",
+        "controlled_quantity": "split; merge; formation scale",
+        "parameter_exposure": "direct-semantic",
+        "target_scope": "group or whole swarm",
+        "temporal_mode": "discrete commands",
+        "human_configuration": "single-user",
+        "multi_user_combination": "no multi-user combination",
+        "substrate": "robotic"
+      },
+      "reconstruction": {
+        "status": "planned-reconstruction",
+        "summary": "Reconstruct discrete changes to subgroup structure and formation scale.",
+        "interaction": "select split merge or scale and optionally choose affected groups",
+        "effect": "one collective becomes several groups reunites or changes formation extent",
+        "semantic_actions": [
+          "split_group",
+          "merge_groups",
+          "set_formation_scale"
+        ],
+        "transfer_boundary": "elicitation evidence does not establish implemented morphology control multi-user governance or universal gestures",
+        "does_not_claim": "This reconstruction does not establish implemented morphology control in the source, multi-user governance, or universal gestures."
+      },
+      "facets": {
+        "input_routes": [
+          "gesture",
+          "touch",
+          "speech",
+          "multimodal"
+        ],
+        "control_families": [
+          "morphology-lifecycle"
+        ],
+        "scopes": [
+          "subgroup",
+          "swarm"
+        ],
+        "temporal_modes": [
+          "discrete"
+        ],
+        "multi_user_policies": [
+          "single-user"
+        ],
+        "substrates": [
+          "robotic"
+        ],
+        "evidence_statuses": [
+          "evaluated-elicitation"
+        ]
+      }
+    },
+    {
+      "public_id": "lease-expiry-and-handoff",
+      "display_order": 230,
+      "title": "Acquire expire and hand off a per-robot lease",
+      "source": {
+        "source_id": "cs-source-adekoya-et-al-2026-multi-operator-mixed-reality",
+        "system_or_study": "HORUS multi-operator control leases",
+        "year": 2026,
+        "paper_url": "https://arxiv.org/abs/2606.07013",
+        "project_url": "https://ras.papercept.net/conferences/conferences/ROMAN26/program/ROMAN26_ContentListWeb_3.html",
+        "artifact_url": null,
+        "source_locus": "Sections III-D through III-F and IV-VI",
+        "evidence_kind": "empirical-user-study",
+        "literature_status": "evaluated-interaction",
+        "catalog_projection_status": "verified-projection",
+        "checked_on": "2026-08-03"
+      },
+      "reported": {
+        "input_expression": "Meta Quest 3 mixed-reality spatial interface",
+        "input_routes": "exact controller or hand action not extracted",
+        "user_action": "select a robot acquire its lease hand it off or wait for expiry",
+        "semantic_action": "change exclusive control ownership",
+        "control_family": "governance-autonomy",
+        "controlled_quantity": "per-robot control ownership; lease expiry; handoff",
+        "parameter_exposure": "discrete-regime",
+        "target_scope": "one robot within a three-robot team",
+        "temporal_mode": "continuous runtime",
+        "human_configuration": "multi-user",
+        "multi_user_combination": "exclusive per-robot lease and explicit handoff",
+        "substrate": "digital"
+      },
+      "reconstruction": {
+        "status": "planned-reconstruction",
+        "summary": "Reconstruct exclusive per-member control leases with visible acquisition, expiry, release, and handoff.",
+        "interaction": "use two operator panels to request grant release and expire one member's lease",
+        "effect": "ownership badges and enabled commands move between operators without blending commands",
+        "semantic_actions": [
+          "request_lease",
+          "release_lease",
+          "handoff_lease",
+          "expire_lease"
+        ],
+        "transfer_boundary": "fully simulated centrally supervised three-robot system without endogenous swarm dynamics or mixed-ability design",
+        "does_not_claim": "This reconstruction does not reproduce the mixed-reality system or establish endogenous swarm dynamics, mixed-ability access, or equitable authority."
+      },
+      "facets": {
+        "input_routes": [
+          "mixed-reality",
+          "spatial-interface"
+        ],
+        "control_families": [
+          "governance-autonomy"
+        ],
+        "scopes": [
+          "member"
+        ],
+        "temporal_modes": [
+          "continuous",
+          "expiring"
+        ],
+        "multi_user_policies": [
+          "exclusive-lease"
+        ],
+        "substrates": [
+          "digital"
+        ],
+        "evidence_statuses": [
+          "evaluated-interaction"
+        ]
+      }
+    },
+    {
+      "public_id": "save-retrieve-reset-replay",
+      "display_order": 260,
+      "title": "Save retrieve and reset collective state",
+      "source": {
+        "source_id": "cs-source-alhafnawi-et-al-2020-robotic-canvas",
+        "system_or_study": "Robotic Canvas history controls",
+        "year": 2020,
+        "paper_url": "https://doi.org/10.1162/isal_a_00285",
+        "project_url": "https://research-information.bris.ac.uk/en/publications/robotic-canvas-interactive-painting-onto-robot-swarms/",
+        "artifact_url": null,
+        "source_locus": "history controls and 200-robot performance",
+        "evidence_kind": "technical-demonstration",
+        "literature_status": "implemented-demonstration",
+        "catalog_projection_status": "verified-projection",
+        "checked_on": "2026-07-25"
+      },
+      "reported": {
+        "input_expression": "dedicated memory and undo Kilobots",
+        "input_routes": "shadow and physical tool interaction",
+        "user_action": "store retrieve or reset a canvas state",
+        "semantic_action": "activate saved global state or whole-canvas reset",
+        "control_family": "historical-versioning",
+        "controlled_quantity": "five saved canvas states; whole-canvas reset",
+        "parameter_exposure": "direct-semantic",
+        "target_scope": "global canvas",
+        "temporal_mode": "discrete runtime",
+        "human_configuration": "multi-user",
+        "multi_user_combination": "shared global memory and reset; no per-user provenance",
+        "substrate": "robotic"
+      },
+      "reconstruction": {
+        "status": "planned-reconstruction",
+        "summary": "Use save, retrieve, reset, and deterministic replay as atlas-wide history infrastructure.",
+        "interaction": "create named checkpoints retrieve one or issue a visible reset",
+        "effect": "collective state returns to a stored snapshot while the event history remains visible in the reconstruction",
+        "semantic_actions": [
+          "save_state",
+          "retrieve_state",
+          "reset_state",
+          "replay_actions"
+        ],
+        "transfer_boundary": "whole-canvas memory only; no selective undo branching per-person provenance or participant-outcome evidence",
+        "does_not_claim": "This reconstruction does not reproduce the robotic canvas or establish selective undo, branching, per-person provenance, or participant outcomes."
+      },
+      "facets": {
+        "input_routes": [
+          "physical-tool",
+          "shadow"
+        ],
+        "control_families": [
+          "historical-versioning"
+        ],
+        "scopes": [
+          "swarm",
+          "global-canvas"
+        ],
+        "temporal_modes": [
+          "discrete",
+          "persistent"
+        ],
+        "multi_user_policies": [
+          "shared-global-memory"
+        ],
+        "substrates": [
+          "robotic"
+        ],
+        "evidence_statuses": [
+          "implemented-demonstration"
+        ]
+      }
+    }
+  ]
+}

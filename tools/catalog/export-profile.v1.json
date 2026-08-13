@@ -1,0 +1,135 @@
+{
+  "schema": "combinatorial.swarmability.public.catalog.export-profile.v1",
+  "export_version": "2026-08-13.1",
+  "expected_source_sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
+  "expected_source_row_count": 26,
+  "generated_on": "2026-08-13",
+  "entries": [
+    {
+      "source_id": "cs-source-kim-et-al-2020-user-defined-swarm-control",
+      "control_family": "exogenous-target-or-trajectory",
+      "public_id": "scope-and-granularity",
+      "summary": "Reconstruct target scope as a policy decision that remains separate from the physical input route.",
+      "status": "implemented-reconstruction",
+      "semantic_actions": ["select_member", "set_scope", "set_collective_behavior", "adjust_preferred_speed"],
+      "does_not_claim": "This reconstruction does not reproduce the elicited gestures or establish a universal or ability-diverse interaction vocabulary.",
+      "facets": {
+        "input_routes": ["gesture", "touch", "speech", "multimodal"],
+        "control_families": ["exogenous-target-or-trajectory"],
+        "scopes": ["member", "subgroup", "swarm"],
+        "temporal_modes": ["discrete", "continuous"],
+        "multi_user_policies": ["single-user"],
+        "substrates": ["robotic"],
+        "evidence_statuses": ["evaluated-elicitation"]
+      }
+    },
+    {
+      "source_id": "cs-source-lee-2021-entangled",
+      "control_family": "exogenous-environment-or-field",
+      "public_id": "additive-personal-fields",
+      "summary": "Reconstruct additive personal attractor and repellent fields while retaining contributor provenance.",
+      "status": "planned-reconstruction",
+      "semantic_actions": ["place_field", "move_field", "set_field_polarity"],
+      "does_not_claim": "This reconstruction does not reproduce the original instrument or establish fairness, accessibility, agency, or an optimal overlap policy.",
+      "facets": {
+        "input_routes": ["device-motion", "gesture"],
+        "control_families": ["exogenous-environment-or-field"],
+        "scopes": ["field"],
+        "temporal_modes": ["continuous", "persistent"],
+        "multi_user_policies": ["superposition"],
+        "substrates": ["digital"],
+        "evidence_statuses": ["implemented-demonstration"]
+      }
+    },
+    {
+      "source_id": "cs-source-crandall-et-al-2017-human-swarm-shared-control",
+      "control_family": "endogenous-dynamics",
+      "public_id": "raw-dynamics-parameters",
+      "summary": "Reconstruct direct adjustment of labelled controller parameters and expose the resulting state distribution.",
+      "status": "planned-reconstruction",
+      "semantic_actions": ["set_alignment", "set_cohesion", "set_separation", "set_randomness"],
+      "does_not_claim": "This reconstruction demonstrates technical parameter effects, not evaluated usability, fairness, or shared authorship.",
+      "facets": {
+        "input_routes": ["parameter-interface"],
+        "control_families": ["endogenous-dynamics"],
+        "scopes": ["swarm"],
+        "temporal_modes": ["continuous"],
+        "multi_user_policies": ["single-user"],
+        "substrates": ["robotic"],
+        "evidence_statuses": ["described-technical-mechanism"]
+      }
+    },
+    {
+      "source_id": "cs-source-gobec-et-al-2026-dancing-swarm",
+      "control_family": "semantic-dynamics",
+      "public_id": "semantic-laban-dynamics",
+      "summary": "Reconstruct semantically labelled movement qualities as inspectable combinations of raw swarm parameters.",
+      "status": "planned-reconstruction",
+      "semantic_actions": ["set_space_quality", "set_time_quality", "set_weight_quality", "set_flow_quality"],
+      "does_not_claim": "This reconstruction does not reproduce the live body pipeline; the reported evaluation used rendered clips and did not evaluate multi-user control, accessibility, agency, or authorship.",
+      "facets": {
+        "input_routes": ["camera-pose", "slider"],
+        "control_families": ["semantic-dynamics"],
+        "scopes": ["swarm"],
+        "temporal_modes": ["continuous"],
+        "multi_user_policies": ["single-user"],
+        "substrates": ["digital"],
+        "evidence_statuses": ["evaluated-perception-only"]
+      }
+    },
+    {
+      "source_id": "cs-source-kim-et-al-2020-user-defined-swarm-control",
+      "control_family": "morphology-lifecycle",
+      "public_id": "split-merge-and-rescale",
+      "summary": "Reconstruct discrete changes to subgroup structure and formation scale.",
+      "status": "planned-reconstruction",
+      "semantic_actions": ["split_group", "merge_groups", "set_formation_scale"],
+      "does_not_claim": "This reconstruction does not establish implemented morphology control in the source, multi-user governance, or universal gestures.",
+      "facets": {
+        "input_routes": ["gesture", "touch", "speech", "multimodal"],
+        "control_families": ["morphology-lifecycle"],
+        "scopes": ["subgroup", "swarm"],
+        "temporal_modes": ["discrete"],
+        "multi_user_policies": ["single-user"],
+        "substrates": ["robotic"],
+        "evidence_statuses": ["evaluated-elicitation"]
+      }
+    },
+    {
+      "source_id": "cs-source-adekoya-et-al-2026-multi-operator-mixed-reality",
+      "control_family": "governance-autonomy",
+      "public_id": "lease-expiry-and-handoff",
+      "summary": "Reconstruct exclusive per-member control leases with visible acquisition, expiry, release, and handoff.",
+      "status": "planned-reconstruction",
+      "semantic_actions": ["request_lease", "release_lease", "handoff_lease", "expire_lease"],
+      "does_not_claim": "This reconstruction does not reproduce the mixed-reality system or establish endogenous swarm dynamics, mixed-ability access, or equitable authority.",
+      "facets": {
+        "input_routes": ["mixed-reality", "spatial-interface"],
+        "control_families": ["governance-autonomy"],
+        "scopes": ["member"],
+        "temporal_modes": ["continuous", "expiring"],
+        "multi_user_policies": ["exclusive-lease"],
+        "substrates": ["digital"],
+        "evidence_statuses": ["evaluated-interaction"]
+      }
+    },
+    {
+      "source_id": "cs-source-alhafnawi-et-al-2020-robotic-canvas",
+      "control_family": "historical-versioning",
+      "public_id": "save-retrieve-reset-replay",
+      "summary": "Use save, retrieve, reset, and deterministic replay as atlas-wide history infrastructure.",
+      "status": "planned-reconstruction",
+      "semantic_actions": ["save_state", "retrieve_state", "reset_state", "replay_actions"],
+      "does_not_claim": "This reconstruction does not reproduce the robotic canvas or establish selective undo, branching, per-person provenance, or participant outcomes.",
+      "facets": {
+        "input_routes": ["physical-tool", "shadow"],
+        "control_families": ["historical-versioning"],
+        "scopes": ["swarm", "global-canvas"],
+        "temporal_modes": ["discrete", "persistent"],
+        "multi_user_policies": ["shared-global-memory"],
+        "substrates": ["robotic"],
+        "evidence_statuses": ["implemented-demonstration"]
+      }
+    }
+  ]
+}

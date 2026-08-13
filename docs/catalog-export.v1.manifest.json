@@ -1,0 +1,34 @@
+{
+  "schema": "combinatorial.swarmability.public.catalog.export-manifest.v1",
+  "export_version": "2026-08-13.1",
+  "generated_on": "2026-08-13",
+  "review_state": "pending_locked_review",
+  "source": {
+    "authority": "research-memory",
+    "sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
+    "row_count": 26,
+    "bytes": 31171,
+    "encoding": "utf-8",
+    "line_endings": "lf"
+  },
+  "transform": {
+    "schema_sha256": "393344ead11abeaba854a80f08abc484c4f8ce6d983d5a4d058abca6b4e180a9",
+    "profile_sha256": "2292712d8d5799ff556b73d4cb467fd272d5e1331c9b630d4478ed23b221afd4",
+    "selected_rows": 7,
+    "rejected_rows": 19,
+    "unknown_fields_rejected": true,
+    "selector_cardinality": "exactly-one"
+  },
+  "output": {
+    "relative_path": "web/data/catalog.v1.json",
+    "sha256": "0b6b6bff49ca88ee06e524ad1736a79c7b91b1c95364fc6f06798a828f350f6b",
+    "item_count": 7
+  },
+  "boundary_checks": {
+    "private_paths_absent": true,
+    "internal_note_names_absent": true,
+    "credentials_absent": true,
+    "http_urls_only": true,
+    "unsupported_source_rows_rejected": true
+  }
+}
