@@ -1,6 +1,6 @@
 {
   "schema": "combinatorial.swarmability.public.catalog.export-profile.v1",
-  "export_version": "2026-08-13.4",
+  "export_version": "2026-08-13.5",
   "expected_source_sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
   "expected_source_row_count": 26,
   "generated_on": "2026-08-13",
@@ -63,10 +63,10 @@
       "source_id": "cs-source-gobec-et-al-2026-dancing-swarm",
       "control_family": "semantic-dynamics",
       "public_id": "semantic-laban-dynamics",
-      "summary": "Reconstruct semantically labelled movement qualities as inspectable combinations of raw swarm parameters.",
-      "status": "planned-reconstruction",
+      "summary": "Reconstruct semantically labelled movement qualities through transparent app-owned qualitative interpolation into one inspectable raw swarm-parameter vector.",
+      "status": "implemented-reconstruction",
       "semantic_actions": ["set_space_quality", "set_time_quality", "set_weight_quality", "set_flow_quality"],
-      "does_not_claim": "This reconstruction does not reproduce the live body pipeline; the reported evaluation used rendered clips and did not evaluate multi-user control, accessibility, agency, or authorship.",
+      "does_not_claim": "This app-owned qualitative mapping is not the authors' runtime or a validated universal Laban interpreter; the reported evaluation used rendered clips and did not evaluate live control, multi-user control, accessibility, agency, or authorship.",
       "facets": {
         "input_routes": ["camera-pose", "slider"],
         "control_families": ["semantic-dynamics"],
