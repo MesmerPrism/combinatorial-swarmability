@@ -1,0 +1,17 @@
+[
+  { "type": "select_member", "member_id": 4 },
+  { "type": "set_scope", "scope": "member" },
+  {
+    "type": "adjust_speed",
+    "delta": 0.125,
+    "expected_selection_revision": 1
+  },
+  { "type": "set_scope", "scope": "subgroup" },
+  {
+    "type": "adjust_speed",
+    "delta": -0.05,
+    "expected_selection_revision": 2
+  },
+  { "type": "start" }
+]
+

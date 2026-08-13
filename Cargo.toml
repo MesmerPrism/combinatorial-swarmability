@@ -1,0 +1,29 @@
+[workspace]
+members = [
+    "crates/demo-core",
+    "crates/demo-wasm",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Till Holzapfel"]
+license = "AGPL-3.0-or-later"
+rust-version = "1.80"
+
+[workspace.dependencies]
+rusty-matter-model = { git = "https://github.com/MesmerPrism/rusty-matter.git", rev = "54a18d85ee877f5cb6c8275013da8a76764b140e", features = ["serde"] }
+rusty-matter-particles = { git = "https://github.com/MesmerPrism/rusty-matter.git", rev = "54a18d85ee877f5cb6c8275013da8a76764b140e", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+wasm-bindgen = "=0.2.105"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"

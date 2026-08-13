@@ -1,0 +1,20 @@
+[package]
+name = "combinatorial-swarmability-demo-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rusty-matter-model.workspace = true
+rusty-matter-particles.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+sha2.workspace = true
+
+[lints]
+workspace = true
+
