@@ -52,7 +52,24 @@ $requiredIds = @(
     'lease-receiver', 'lease-lifetime', 'lease-lifetime-value',
     'request-lease-button', 'release-lease-button', 'offer-handoff-button',
     'accept-handoff-button', 'decline-handoff-button', 'leased-behavior',
-    'use-lease-button', 'lease-command-reason'
+    'use-lease-button', 'lease-command-reason', 'nav-comparison-link',
+    'open-comparison-button',
+    'comparison', 'comparison-title',
+    'close-comparison-button', 'comparison-controls', 'comparison-scenario',
+    'comparison-seed', 'comparison-start-button', 'comparison-pause-button',
+    'comparison-step-button', 'comparison-reset-button', 'comparison-replay-button',
+    'comparison-status', 'comparison-progress', 'comparison-ticks',
+    'comparison-start-equality', 'comparison-shared-input', 'comparison-isolation',
+    'comparison-vector-relation', 'comparison-left-title', 'comparison-right-title',
+    'comparison-left-config', 'comparison-right-config', 'comparison-left-canvas',
+    'comparison-right-canvas', 'comparison-left-rates', 'comparison-right-rates',
+    'comparison-left-extras', 'comparison-right-extras', 'comparison-left-source',
+    'comparison-right-source', 'comparison-left-evidence', 'comparison-right-evidence',
+    'comparison-left-transfer', 'comparison-right-transfer', 'comparison-left-nonclaim',
+    'comparison-right-nonclaim', 'comparison-left-provenance', 'comparison-right-provenance',
+    'comparison-left-policy-state', 'comparison-right-policy-state',
+    'comparison-left-trace', 'comparison-right-trace', 'comparison-metrics-body',
+    'comparison-claim-boundary'
 )
 foreach ($id in $requiredIds) {
     if ($html -notmatch "id=[`"']$([regex]::Escape($id))[`"']") {
@@ -83,8 +100,10 @@ if ($styles -notmatch '@media\s*\(prefers-reduced-motion:\s*reduce\)' -or
     $styles -notmatch '@media\s*\(forced-colors:\s*active\)' -or
     $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.resolved-inspector' -or
     $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.morphology-trace' -or
-    $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.lease-trace') {
-    throw 'Semantic dynamics, morphology, and leases must retain reduced-motion and forced-colors contracts.'
+    $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.lease-trace' -or
+    $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.comparison-lane' -or
+    $styles -notmatch '(?s)@media\s*\(max-width:\s*720px\).*\.comparison-lanes') {
+    throw 'Semantic dynamics, morphology, leases, and comparison mode must retain reduced-motion, forced-colors, and mobile contracts.'
 }
 foreach ($functionName in @(
     'populateAtlasFilters', 'renderAtlasList', 'renderAtlasDetail',
@@ -99,11 +118,30 @@ foreach ($functionName in @(
     'renderMorphologyRoster', 'updateMorphologyTrace', 'requestSelectedLease',
     'releaseSelectedLease', 'offerSelectedHandoff', 'resolveSelectedHandoff',
     'useSelectedLease', 'updateLeaseControls', 'renderLeaseRoster',
-    'updateLeaseTrace', 'traceAnimatedLeaseExpiry'
+    'updateLeaseTrace', 'traceAnimatedLeaseExpiry', 'openComparisonMode',
+    'closeComparisonMode', 'initializeComparison', 'startComparison',
+    'pauseComparison', 'stepComparisonEvent', 'resetComparison',
+    'replayComparison', 'refreshComparison', 'renderComparisonInvariants',
+    'renderComparisonLane', 'renderComparisonEvidence', 'renderComparisonPolicyState',
+    'renderComparisonTrace', 'renderComparisonMetrics', 'drawComparisonLane'
 )) {
     if ($script -notmatch "function\s+$functionName\s*\(") {
         throw "Atlas adapter is missing $functionName."
     }
+}
+foreach ($comparisonContract in @(
+    'combinatorial.swarmability.comparison-spec.v1',
+    'combinatorial.swarmability.normalized-input-tape.v1',
+    'raw_semantic_equivalent', 'raw_semantic_contrast', 'superposition_lease',
+    'new ComparisonEngine(specJson)', 'ordinaryStateBeforeComparison = engine.state_json()',
+    'ordinaryRowsBeforeComparison = Array.from(engine.frame_rows())'
+)) {
+    if (-not $script.Contains($comparisonContract)) {
+        throw "Comparison infrastructure is missing contract: $comparisonContract"
+    }
+}
+if ($script -notmatch 'import\s+init,\s*\{\s*ComparisonEngine,\s*DemoEngine\s*\}') {
+    throw 'The browser adapter must import the isolated comparison engine explicitly.'
 }
 foreach ($adapterMethod in @('engine.replay_json()', 'engine.load_replay_json(')) {
     if (-not $script.Contains($adapterMethod)) {
@@ -211,4 +249,4 @@ foreach ($item in @($catalog.items)) {
     }
 }
 
-Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, and seven bound reconstructions.'
+Write-Host 'Atlas shell contract passed: seven facets and reconstructions, independent evidence cards, action provenance, metrics, and isolated comparison mode.'

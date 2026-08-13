@@ -36,6 +36,10 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Save, retrieve, reset, and replay are ordinary buttons with a labelled native
   select. Five session-local checkpoint names avoid precision, drag, or timing
   requirements.
+- Comparison mode uses a labelled native scenario select and decimal seed input.
+  Start, pause, one-event step, reset-both, full replay, and return controls are
+  ordinary keyboard-operable buttons. Reduced motion slows automatic event
+  pacing while both lanes still update in lockstep.
 
 ## Perception
 
@@ -73,6 +77,12 @@ The canvas is a visual projection, not the sole interface or state authority.
 - The canvas has a concise text description and is never focus-required.
 - Focus indicators are explicit; forced-colors and 200% zoom layouts are
   supported.
+- Each comparison lane has a heading, configuration ID, catalogue/source card,
+  evidence status, transfer boundary, independent non-claim, six-value resolved
+  vector, final-state revisions, field/lease provenance, and complete input →
+  semantic action → policy → receipt trace. A semantic table gives both values,
+  the Lane B minus Lane A delta, definition, and unit; color and canvas are never
+  required to distinguish lanes or policy outcomes.
 
 ## Motion and announcements
 
@@ -91,4 +101,8 @@ consequences, split/merge/rescale controls, group rosters and metrics,
 lease acquisition/release/handoff/expiry, consent states and disabled reasons,
 inspection without state drift, focus visibility,
 reduced-motion state, intentional start, pause, single-step, reset/replay, and
-horizontal overflow.
+horizontal overflow. Comparison checks cover equivalent and intentionally
+different raw/semantic vectors, superposition/lease rejection provenance,
+lockstep start/pause/step/reset/replay, ordinary-atlas preservation, evidence
+cards, trace disclosure, the metrics table, mobile single-column lanes,
+forced-colors borders, and zero diagnostics.

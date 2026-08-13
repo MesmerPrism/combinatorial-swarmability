@@ -1,4 +1,4 @@
-import init, { DemoEngine } from "./pkg/demo_wasm.js?v=leases-v1";
+import init, { ComparisonEngine, DemoEngine } from "./pkg/demo_wasm.js?v=comparison-v1";
 
 const DEFAULT_SEED = "2026";
 const SPEED_DELTA = 0.10;
@@ -8,6 +8,15 @@ const MAX_SESSION_HISTORY = 50;
 const MAX_PERSONAL_FIELDS = 8;
 const MAX_MORPHOLOGY_GROUPS = 8;
 const MAX_ACTIVE_LEASES = 8;
+const COMPARISON_SPEC_SCHEMA = "combinatorial.swarmability.comparison-spec.v1";
+const COMPARISON_TAPE_SCHEMA = "combinatorial.swarmability.normalized-input-tape.v1";
+const COMPARISON_STEP_INTERVAL = 320;
+const COMPARISON_REDUCED_STEP_INTERVAL = 700;
+const COMPARISON_SCENARIOS = {
+  raw_semantic_equivalent: "raw-semantic-midpoint.v1",
+  raw_semantic_contrast: "raw-semantic-contrast.v1",
+  superposition_lease: "superposition-lease.v1",
+};
 const CONTRIBUTOR_LABELS = ["A", "B", "C", "D"];
 const OPERATOR_LABELS = ["A", "B", "C", "D"];
 const CONTRIBUTOR_COLORS = ["#3f6f85", "#a85d45", "#657a46", "#755b9b"];
@@ -49,6 +58,13 @@ const leasedBehavior = document.querySelector("#leased-behavior");
 const atlasFilters = document.querySelector("#atlas-filters");
 const atlasList = document.querySelector("#atlas-list");
 const atlasCount = document.querySelector("#atlas-count");
+const demonstration = document.querySelector("#demonstration");
+const comparisonSection = document.querySelector("#comparison");
+const comparisonScenario = document.querySelector("#comparison-scenario");
+const comparisonSeed = document.querySelector("#comparison-seed");
+const comparisonStatus = document.querySelector("#comparison-status");
+const comparisonLeftCanvas = document.querySelector("#comparison-left-canvas");
+const comparisonRightCanvas = document.querySelector("#comparison-right-canvas");
 
 let engine;
 let state;
@@ -62,9 +78,17 @@ let animationHandle = 0;
 let previousTimestamp = 0;
 let reducedTimestamp = 0;
 let rowWidth = 0;
+let comparisonEngine = null;
+let comparisonResult = null;
+let comparisonModeActive = false;
+let comparisonRunning = false;
+let comparisonAnimationHandle = 0;
+let comparisonPreviousTimestamp = 0;
+let ordinaryStateBeforeComparison = "";
+let ordinaryRowsBeforeComparison = [];
 
 await init({
-  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=leases-v1", import.meta.url),
+  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=comparison-v1", import.meta.url),
 });
 engine = new DemoEngine(DEFAULT_SEED);
 rowWidth = DemoEngine.frame_row_width();
@@ -115,6 +139,19 @@ function createMemberControls(count) {
 }
 
 function bindControls() {
+  document.querySelector("#open-comparison-button").addEventListener("click", openComparisonMode);
+  document.querySelector("#nav-comparison-link").addEventListener("click", (event) => {
+    event.preventDefault();
+    openComparisonMode();
+  });
+  document.querySelector("#close-comparison-button").addEventListener("click", closeComparisonMode);
+  document.querySelector("#comparison-start-button").addEventListener("click", startComparison);
+  document.querySelector("#comparison-pause-button").addEventListener("click", pauseComparison);
+  document.querySelector("#comparison-step-button").addEventListener("click", stepComparisonEvent);
+  document.querySelector("#comparison-reset-button").addEventListener("click", resetComparison);
+  document.querySelector("#comparison-replay-button").addEventListener("click", replayComparison);
+  comparisonScenario.addEventListener("change", initializeComparison);
+  comparisonSeed.addEventListener("change", initializeComparison);
   document.querySelector("#start-button").addEventListener("click", (event) => {
     dispatch(
       { type: "start" },
@@ -229,7 +266,7 @@ function bindControls() {
 
   canvas.addEventListener("pointerup", selectNearestCanvasMember);
   document.addEventListener("keydown", (event) => {
-    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
+    if (comparisonModeActive || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
       return;
     }
     const tagName = event.target instanceof Element ? event.target.tagName : "";
@@ -1103,6 +1140,520 @@ function parameterLabel(value) {
   return value && typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
+function comparisonSpecJson() {
+  const scenarioId = comparisonScenario.value;
+  const tapeId = COMPARISON_SCENARIOS[scenarioId];
+  const seed = comparisonSeed.value.trim();
+  if (!tapeId) {
+    throw new Error("Choose a supported comparison.");
+  }
+  if (!/^(0|[1-9][0-9]{0,19})$/.test(seed) || BigInt(seed) > 18446744073709551615n) {
+    throw new Error("Comparison seed must be one decimal integer from 0 to 18446744073709551615 without leading zeroes.");
+  }
+  return JSON.stringify({
+    schema: COMPARISON_SPEC_SCHEMA,
+    scenario_id: scenarioId,
+    seed,
+    left_seed: seed,
+    right_seed: seed,
+    input_tape: {
+      schema: COMPARISON_TAPE_SCHEMA,
+      tape_id: tapeId,
+    },
+  });
+}
+
+function openComparisonMode() {
+  if (comparisonModeActive) {
+    return;
+  }
+  ordinaryStateBeforeComparison = engine.state_json();
+  ordinaryRowsBeforeComparison = Array.from(engine.frame_rows());
+  comparisonModeActive = true;
+  if (animationHandle !== 0) {
+    cancelAnimationFrame(animationHandle);
+    animationHandle = 0;
+  }
+  comparisonSeed.value = state.seed;
+  demonstration.hidden = true;
+  comparisonSection.hidden = false;
+  initializeComparison();
+  comparisonScenario.focus();
+}
+
+function closeComparisonMode() {
+  pauseComparison(false);
+  const currentState = engine.state_json();
+  const currentRows = Array.from(engine.frame_rows());
+  const rowsEqual = currentRows.length === ordinaryRowsBeforeComparison.length
+    && currentRows.every((value, index) => Object.is(value, ordinaryRowsBeforeComparison[index]));
+  if (currentState !== ordinaryStateBeforeComparison || !rowsEqual) {
+    comparisonStatus.textContent = "Exit rejected: the ordinary atlas changed while comparison mode was active.";
+    comparisonStatus.dataset.error = "true";
+    return;
+  }
+  if (comparisonEngine && typeof comparisonEngine.free === "function") {
+    comparisonEngine.free();
+  }
+  comparisonEngine = null;
+  comparisonResult = null;
+  comparisonModeActive = false;
+  comparisonSection.hidden = true;
+  demonstration.hidden = false;
+  syncAnimation();
+  document.querySelector("#open-comparison-button").focus();
+}
+
+function initializeComparison() {
+  if (!comparisonModeActive) {
+    return;
+  }
+  pauseComparison(false);
+  try {
+    const specJson = comparisonSpecJson();
+    if (comparisonEngine && typeof comparisonEngine.free === "function") {
+      comparisonEngine.free();
+    }
+    comparisonEngine = new ComparisonEngine(specJson);
+    comparisonResult = JSON.parse(comparisonEngine.result_json());
+    comparisonStatus.textContent = "Comparison ready. Both lanes are paused at their byte-identical canonical start.";
+    comparisonStatus.dataset.error = "false";
+    refreshComparison();
+  } catch (error) {
+    comparisonEngine = null;
+    comparisonResult = null;
+    comparisonStatus.textContent = error instanceof Error ? error.message : "Comparison specification was rejected.";
+    comparisonStatus.dataset.error = "true";
+    updateComparisonButtons();
+  }
+}
+
+function startComparison() {
+  if (!comparisonEngine || comparisonResult?.complete) {
+    return;
+  }
+  comparisonRunning = true;
+  comparisonPreviousTimestamp = 0;
+  comparisonStatus.textContent = "Running both isolated lanes from the same normalized input tape.";
+  comparisonStatus.dataset.error = "false";
+  updateComparisonButtons();
+  if (comparisonAnimationHandle === 0) {
+    comparisonAnimationHandle = requestAnimationFrame(animateComparison);
+  }
+}
+
+function pauseComparison(announcePause = true) {
+  comparisonRunning = false;
+  if (comparisonAnimationHandle !== 0) {
+    cancelAnimationFrame(comparisonAnimationHandle);
+    comparisonAnimationHandle = 0;
+  }
+  comparisonPreviousTimestamp = 0;
+  if (announcePause && comparisonResult && !comparisonResult.complete) {
+    comparisonStatus.textContent = "Comparison paused. Step, reset, replay, or resume remain available.";
+    comparisonStatus.dataset.error = "false";
+  }
+  updateComparisonButtons();
+}
+
+function animateComparison(timestamp) {
+  comparisonAnimationHandle = 0;
+  if (!comparisonRunning || !comparisonEngine) {
+    return;
+  }
+  if (comparisonPreviousTimestamp === 0) {
+    comparisonPreviousTimestamp = timestamp;
+  }
+  const interval = reducedMotion.matches
+    ? COMPARISON_REDUCED_STEP_INTERVAL
+    : COMPARISON_STEP_INTERVAL;
+  if (timestamp - comparisonPreviousTimestamp >= interval) {
+    comparisonPreviousTimestamp = timestamp;
+    applyComparisonStep(false);
+  }
+  if (comparisonRunning) {
+    comparisonAnimationHandle = requestAnimationFrame(animateComparison);
+  }
+}
+
+function stepComparisonEvent() {
+  if (comparisonRunning) {
+    return;
+  }
+  applyComparisonStep(true);
+}
+
+function applyComparisonStep(announceStep) {
+  if (!comparisonEngine || comparisonResult?.complete) {
+    return;
+  }
+  try {
+    const receipt = JSON.parse(comparisonEngine.step_event_json());
+    comparisonResult = JSON.parse(comparisonEngine.result_json());
+    refreshComparison();
+    if (comparisonResult.complete) {
+      pauseComparison(false);
+      comparisonStatus.textContent = "Comparison tape complete. Both lanes remain at the same fixed tick.";
+    } else if (announceStep) {
+      comparisonStatus.textContent = `Applied input event ${receipt.cursor} of ${receipt.event_count} to both lanes.`;
+    }
+    comparisonStatus.dataset.error = "false";
+  } catch {
+    pauseComparison(false);
+    comparisonStatus.textContent = "Comparison step failed closed; neither lane result was accepted.";
+    comparisonStatus.dataset.error = "true";
+  }
+}
+
+function resetComparison() {
+  if (!comparisonEngine) {
+    return;
+  }
+  pauseComparison(false);
+  try {
+    comparisonEngine.reset();
+    comparisonResult = JSON.parse(comparisonEngine.result_json());
+    refreshComparison();
+    comparisonStatus.textContent = "Both lanes reset to the byte-identical canonical start.";
+    comparisonStatus.dataset.error = "false";
+  } catch {
+    comparisonStatus.textContent = "Comparison reset failed closed.";
+    comparisonStatus.dataset.error = "true";
+  }
+}
+
+function replayComparison() {
+  if (!comparisonEngine) {
+    return;
+  }
+  pauseComparison(false);
+  try {
+    comparisonResult = JSON.parse(comparisonEngine.replay_all_json());
+    refreshComparison();
+    comparisonStatus.textContent = "Replayed the complete normalized input tape through both isolated reducers.";
+    comparisonStatus.dataset.error = "false";
+  } catch {
+    comparisonStatus.textContent = "Comparison replay failed closed.";
+    comparisonStatus.dataset.error = "true";
+  }
+}
+
+function refreshComparison() {
+  if (!comparisonEngine || !comparisonResult) {
+    updateComparisonButtons();
+    return;
+  }
+  const leftRows = comparisonEngine.left_frame_rows();
+  const rightRows = comparisonEngine.right_frame_rows();
+  renderComparisonInvariants();
+  renderComparisonLane("left", comparisonResult.left, leftRows, comparisonLeftCanvas);
+  renderComparisonLane("right", comparisonResult.right, rightRows, comparisonRightCanvas);
+  renderComparisonMetrics();
+  document.querySelector("#comparison-claim-boundary").textContent = comparisonResult.claim_boundary;
+  updateComparisonButtons();
+}
+
+function updateComparisonButtons() {
+  const ready = Boolean(comparisonEngine && comparisonResult);
+  const complete = Boolean(comparisonResult?.complete);
+  document.querySelector("#comparison-start-button").disabled = !ready || comparisonRunning || complete;
+  document.querySelector("#comparison-pause-button").disabled = !comparisonRunning;
+  document.querySelector("#comparison-step-button").disabled = !ready || comparisonRunning || complete;
+  document.querySelector("#comparison-reset-button").disabled = !ready || comparisonRunning;
+  document.querySelector("#comparison-replay-button").disabled = !ready || comparisonRunning;
+  comparisonScenario.disabled = comparisonRunning;
+  comparisonSeed.disabled = comparisonRunning;
+}
+
+function renderComparisonInvariants() {
+  const invariants = comparisonResult.invariants;
+  document.querySelector("#comparison-progress").textContent =
+    `${comparisonResult.cursor} of ${comparisonResult.event_count} input events`;
+  document.querySelector("#comparison-ticks").textContent =
+    `${comparisonResult.left.metrics.tick} / ${comparisonResult.right.metrics.tick}`;
+  document.querySelector("#comparison-start-equality").textContent =
+    invariants.canonical_start_equal ? "Byte-identical" : "Rejected mismatch";
+  document.querySelector("#comparison-shared-input").textContent =
+    invariants.shared_seed && invariants.shared_input_tape ? "Same seed and tape" : "Rejected mismatch";
+  document.querySelector("#comparison-isolation").textContent =
+    invariants.isolated_mutable_cores && !invariants.ordinary_atlas_state_touched
+      ? "Separate lane cores; ordinary atlas untouched"
+      : "Isolation failed";
+  document.querySelector("#comparison-vector-relation").textContent = {
+    equivalent: "Equivalent across all six values",
+    intentionally_different: "Intentionally different profiles",
+    pending_configuration: "Pending configuration",
+    not_applicable: "Not applicable to policy comparison",
+  }[comparisonResult.vector_relation] || "Unknown";
+}
+
+function renderComparisonLane(side, lane, laneRows, laneCanvas) {
+  document.querySelector(`#comparison-${side}-title`).textContent =
+    `${side === "left" ? "Lane A" : "Lane B"}: ${lane.descriptor.label}`;
+  document.querySelector(`#comparison-${side}-config`).textContent =
+    `${lane.descriptor.configuration_id} · catalogue ${lane.descriptor.catalogue_entry_id}`;
+  const vector = lane.state.resolved_dynamics;
+  document.querySelector(`#comparison-${side}-rates`).textContent =
+    `${vector.rates.alignment.toFixed(2)} / ${vector.rates.cohesion.toFixed(2)} / ${vector.rates.separation.toFixed(2)}`;
+  document.querySelector(`#comparison-${side}-extras`).textContent =
+    `${vector.speed_scale.toFixed(2)} / ${vector.damping.toFixed(2)} / ${vector.jitter.toFixed(2)}`;
+  document.querySelector(`#comparison-${side}-provenance`).textContent = lane.final_state_provenance;
+  renderComparisonEvidence(side, lane.descriptor.catalogue_entry_id);
+  renderComparisonPolicyState(side, lane.state);
+  renderComparisonTrace(side, lane.trace);
+  drawComparisonLane(laneCanvas, laneRows, lane);
+}
+
+function renderComparisonEvidence(side, publicId) {
+  const entry = catalogEntries.find((candidate) => candidate.public_id === publicId);
+  const source = document.querySelector(`#comparison-${side}-source`);
+  if (!entry) {
+    source.textContent = `Public catalogue entry ${publicId} is unavailable.`;
+    document.querySelector(`#comparison-${side}-evidence`).textContent = "Unavailable";
+    document.querySelector(`#comparison-${side}-transfer`).textContent = "Unavailable";
+    document.querySelector(`#comparison-${side}-nonclaim`).textContent = "Unavailable";
+    return;
+  }
+  const link = document.createElement("a");
+  link.href = entry.source.paper_url;
+  link.textContent = entry.title;
+  link.rel = "external";
+  source.replaceChildren(link, document.createTextNode(` · ${entry.source.system_or_study}`));
+  document.querySelector(`#comparison-${side}-evidence`).textContent =
+    `${humanize(entry.source.literature_status)} · ${humanize(entry.source.evidence_kind)}`;
+  document.querySelector(`#comparison-${side}-transfer`).textContent = entry.reconstruction.transfer_boundary;
+  document.querySelector(`#comparison-${side}-nonclaim`).textContent = entry.reconstruction.does_not_claim;
+}
+
+function renderComparisonPolicyState(side, laneState) {
+  const list = document.querySelector(`#comparison-${side}-policy-state`);
+  const fragment = document.createDocumentFragment();
+  laneState.fields.forEach((field) => {
+    const item = document.createElement("li");
+    item.textContent = `Field ${field.field_id + 1}: synthetic Contributor ${CONTRIBUTOR_LABELS[field.contributor_id]}, ${field.polarity}, position ${field.x.toFixed(2)}, ${field.y.toFixed(2)}.`;
+    fragment.append(item);
+  });
+  laneState.leases.forEach((lease) => {
+    const item = document.createElement("li");
+    item.textContent = `Member ${lease.member_id + 1}: synthetic Operator ${OPERATOR_LABELS[lease.holder_operator_id]} holds the lease for ${lease.remaining_steps} more fixed steps; authority revision ${laneState.authority_revision}.`;
+    fragment.append(item);
+  });
+  if (fragment.childNodes.length === 0) {
+    const empty = document.createElement("li");
+    empty.textContent = "No active field or lease provenance in this lane.";
+    fragment.append(empty);
+  }
+  const behavior = document.createElement("li");
+  behavior.textContent = `Behavior distribution: ${laneState.behavior_counts.flock} Flock, ${laneState.behavior_counts.cohere} Cohere, ${laneState.behavior_counts.disperse} Disperse.`;
+  fragment.append(behavior);
+  list.replaceChildren(fragment);
+}
+
+function renderComparisonTrace(side, traces) {
+  const list = document.querySelector(`#comparison-${side}-trace`);
+  if (traces.length === 0) {
+    const empty = document.createElement("li");
+    empty.textContent = "No comparison event applied.";
+    list.replaceChildren(empty);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  traces.forEach((trace) => {
+    const item = document.createElement("li");
+    const heading = document.createElement("strong");
+    const input = document.createElement("span");
+    const request = document.createElement("span");
+    const actions = document.createElement("code");
+    const policy = document.createElement("span");
+    const receipts = document.createElement("span");
+    heading.textContent = `${trace.sequence}. ${trace.normalized_input}`;
+    input.textContent = `Input route: ${trace.input_route}`;
+    request.textContent = `Semantic request: ${trace.semantic_request}`;
+    actions.textContent = `Actions: ${trace.semantic_actions.join(" → ")}`;
+    policy.textContent = `Policy: ${trace.policy}`;
+    receipts.textContent = `Receipts: ${trace.receipts.map(comparisonReceiptLabel).join(" · ")}; tick ${trace.tick_before}→${trace.tick_after}.`;
+    item.append(heading, document.createElement("br"), input, document.createElement("br"), request,
+      document.createElement("br"), actions, document.createElement("br"), policy,
+      document.createElement("br"), receipts);
+    fragment.append(item);
+  });
+  list.replaceChildren(fragment);
+}
+
+function comparisonReceiptLabel(receipt) {
+  return `${receipt.accepted ? "accepted" : "rejected"} ${receipt.code} (state ${receipt.state_revision}, authority ${receipt.authority_revision})`;
+}
+
+function renderComparisonMetrics() {
+  const body = document.querySelector("#comparison-metrics-body");
+  const fragment = document.createDocumentFragment();
+  comparisonResult.metric_definitions.forEach((definition) => {
+    const row = document.createElement("tr");
+    const label = document.createElement("th");
+    const note = document.createElement("span");
+    const left = document.createElement("td");
+    const right = document.createElement("td");
+    const delta = document.createElement("td");
+    label.scope = "row";
+    label.textContent = definition.label;
+    note.textContent = `${definition.definition} Unit: ${definition.unit}.`;
+    label.append(note);
+    left.textContent = comparisonMetricValue(definition.metric_id, comparisonResult.left.metrics);
+    right.textContent = comparisonMetricValue(definition.metric_id, comparisonResult.right.metrics);
+    delta.textContent = comparisonMetricDelta(definition.metric_id, comparisonResult.delta_right_minus_left);
+    row.append(label, left, right, delta);
+    fragment.append(row);
+  });
+  body.replaceChildren(fragment);
+}
+
+function comparisonMetricValue(metricId, metrics) {
+  if (metricId === "group_count") {
+    return `${metrics.group_count}; sizes ${metrics.group_sizes.join(" / ")}`;
+  }
+  if (metricId === "behavior_distribution") {
+    const values = metrics.behavior_distribution;
+    return `${values.flock} / ${values.cohere} / ${values.disperse}`;
+  }
+  if (["tick", "active_fields", "active_leases"].includes(metricId)) {
+    return String(metrics[metricId]);
+  }
+  return Number(metrics[metricId]).toFixed(3);
+}
+
+function comparisonMetricDelta(metricId, deltas) {
+  if (metricId === "behavior_distribution") {
+    const values = deltas.behavior_distribution;
+    return `${signedInteger(values.flock)} / ${signedInteger(values.cohere)} / ${signedInteger(values.disperse)}`;
+  }
+  if (["tick", "group_count", "active_fields", "active_leases"].includes(metricId)) {
+    return signedInteger(deltas[metricId]);
+  }
+  const value = Number(deltas[metricId]);
+  return `${value > 0 ? "+" : ""}${value.toFixed(3)}`;
+}
+
+function signedInteger(value) {
+  const number = Number(value);
+  return `${number > 0 ? "+" : ""}${number}`;
+}
+
+function drawComparisonLane(laneCanvas, laneRows, lane) {
+  const laneContext = laneCanvas.getContext("2d", { alpha: false });
+  const width = laneCanvas.width;
+  const height = laneCanvas.height;
+  laneContext.fillStyle = "#fbf8f2";
+  laneContext.fillRect(0, 0, width, height);
+  laneContext.strokeStyle = "#ded5ca";
+  laneContext.lineWidth = 1;
+  laneContext.setLineDash([4, 10]);
+  for (let index = 1; index < 6; index += 1) {
+    laneContext.beginPath();
+    laneContext.moveTo((width / 6) * index, 0);
+    laneContext.lineTo((width / 6) * index, height);
+    laneContext.moveTo(0, (height / 6) * index);
+    laneContext.lineTo(width, (height / 6) * index);
+    laneContext.stroke();
+  }
+  laneContext.setLineDash([]);
+  const projectedRows = [];
+  for (let offset = 0; offset + rowWidth <= laneRows.length; offset += rowWidth) {
+    projectedRows.push(laneRows.subarray(offset, offset + rowWidth));
+  }
+  relationEdges(projectedRows).forEach(([firstIndex, secondIndex]) => {
+    const first = projectedRows[firstIndex];
+    const second = projectedRows[secondIndex];
+    laneContext.strokeStyle = "#b9aea2";
+    laneContext.lineWidth = 1.2;
+    laneContext.beginPath();
+    laneContext.moveTo(((first[1] + 1) / 2) * width, ((1 - first[2]) / 2) * height);
+    laneContext.lineTo(((second[1] + 1) / 2) * width, ((1 - second[2]) / 2) * height);
+    laneContext.stroke();
+  });
+  lane.state.fields.forEach((field) => drawComparisonField(laneContext, field, width, height));
+  projectedRows.forEach((row) => drawComparisonMember(laneContext, row, lane.state, width, height));
+  laneCanvas.setAttribute(
+    "aria-label",
+    `${lane.descriptor.label}, seed ${lane.state.seed}, tick ${lane.state.tick}: ${lane.state.behavior_counts.flock} Flock, ${lane.state.behavior_counts.cohere} Cohere, ${lane.state.behavior_counts.disperse} Disperse; ${lane.state.fields.length} fields and ${lane.state.leases.length} leases.`
+  );
+}
+
+function drawComparisonField(laneContext, field, width, height) {
+  const x = ((field.x + 1) / 2) * width;
+  const y = ((1 - field.y) / 2) * height;
+  laneContext.save();
+  laneContext.translate(x, y);
+  laneContext.strokeStyle = "#6f362b";
+  laneContext.lineWidth = 3;
+  laneContext.beginPath();
+  laneContext.arc(0, 0, 22, 0, Math.PI * 2);
+  laneContext.stroke();
+  laneContext.fillStyle = "#1e1713";
+  laneContext.font = "700 14px Aptos, Candara, sans-serif";
+  laneContext.textAlign = "center";
+  laneContext.textBaseline = "middle";
+  laneContext.fillText(`${CONTRIBUTOR_LABELS[field.contributor_id]}${field.polarity === "attract" ? "+" : "−"}`, 0, 1);
+  laneContext.restore();
+}
+
+function drawComparisonMember(laneContext, row, laneState, width, height) {
+  const memberId = Math.round(row[0]);
+  const behavior = Math.round(row[10]);
+  const groupId = Math.round(row[11]);
+  const x = ((row[1] + 1) / 2) * width;
+  const y = ((1 - row[2]) / 2) * height;
+  const radius = Math.max(6, row[3] * width * 0.5);
+  laneContext.save();
+  laneContext.translate(x, y);
+  laneContext.strokeStyle = GROUP_COLORS[groupId] || "#315d6c";
+  laneContext.lineWidth = 2;
+  laneContext.beginPath();
+  laneContext.arc(0, 0, radius + 7, 0, Math.PI * 2);
+  laneContext.stroke();
+  laneContext.fillStyle = ["#d9a86c", "#9aae8f", "#d59b87"][behavior];
+  laneContext.strokeStyle = "#1e1713";
+  laneContext.lineWidth = 2;
+  drawComparisonShape(laneContext, radius, behavior);
+  laneContext.fill();
+  laneContext.stroke();
+  laneContext.fillStyle = "#1e1713";
+  laneContext.font = "600 12px Aptos, Candara, sans-serif";
+  laneContext.textAlign = "center";
+  laneContext.textBaseline = "middle";
+  laneContext.fillText(String(memberId + 1), 0, 1);
+  const lease = laneState.leases.find((candidate) => candidate.member_id === memberId);
+  if (lease) {
+    laneContext.font = "700 11px Aptos, Candara, sans-serif";
+    laneContext.fillText(`L:${OPERATOR_LABELS[lease.holder_operator_id]}`, 0, radius + 19);
+  }
+  laneContext.restore();
+}
+
+function drawComparisonShape(laneContext, radius, behavior) {
+  laneContext.beginPath();
+  if (behavior === 1) {
+    for (let side = 0; side < 6; side += 1) {
+      const angle = -Math.PI / 2 + (side * Math.PI) / 3;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      if (side === 0) {
+        laneContext.moveTo(x, y);
+      } else {
+        laneContext.lineTo(x, y);
+      }
+    }
+    laneContext.closePath();
+  } else if (behavior === 2) {
+    laneContext.moveTo(0, -radius);
+    laneContext.lineTo(radius, 0);
+    laneContext.lineTo(0, radius);
+    laneContext.lineTo(-radius, 0);
+    laneContext.closePath();
+  } else {
+    laneContext.arc(0, 0, radius, 0, Math.PI * 2);
+  }
+}
+
 function refreshAll() {
   state = JSON.parse(engine.state_json());
   rows = engine.frame_rows();
@@ -1113,6 +1664,13 @@ function refreshAll() {
 }
 
 function syncAnimation() {
+  if (comparisonModeActive) {
+    if (animationHandle !== 0) {
+      cancelAnimationFrame(animationHandle);
+      animationHandle = 0;
+    }
+    return;
+  }
   if (state.running && animationHandle === 0) {
     previousTimestamp = 0;
     animationHandle = requestAnimationFrame(animate);
@@ -1124,7 +1682,7 @@ function syncAnimation() {
 
 function animate(timestamp) {
   animationHandle = 0;
-  if (!state.running) {
+  if (comparisonModeActive || !state.running) {
     return;
   }
   if (previousTimestamp === 0) {

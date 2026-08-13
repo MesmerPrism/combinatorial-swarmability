@@ -16,6 +16,7 @@
         <nav aria-label="Primary">
           <a href="#atlas">Atlas</a>
           <a href="#demonstration">Demonstration</a>
+          <a id="nav-comparison-link" href="#comparison">Compare</a>
           <a href="#context">Context</a>
           <a href="https://mesmerprism.com/projects/rusty-morphospace.html">Rusty Morphospace</a>
         </nav>
@@ -47,6 +48,7 @@
             dynamics, semantic movement qualities, split/merge/rescale morphology,
             lease acquisition/expiry/handoff, and deterministic history are interactive in this slice.
           </p>
+          <button id="open-comparison-button" type="button">Open lockstep comparison</button>
         </div>
 
         <form id="atlas-filters" class="atlas-filters" aria-label="Filter atlas entries">
@@ -644,6 +646,133 @@
         </div>
       </section>
 
+      <section id="comparison" class="comparison shell" aria-labelledby="comparison-title" hidden>
+        <div class="section-heading comparison-heading">
+          <div>
+            <h2 id="comparison-title">Lockstep comparison</h2>
+            <p>
+              Two isolated deterministic cores start from one canonical snapshot and consume
+              the same normalized input tape. Only the named mapping or authority policy differs.
+            </p>
+          </div>
+          <button id="close-comparison-button" type="button" class="secondary-button">Return to ordinary atlas</button>
+        </div>
+
+        <form id="comparison-controls" class="comparison-controls" aria-label="Comparison controls">
+          <label for="comparison-scenario">Comparison</label>
+          <select id="comparison-scenario" name="comparison-scenario">
+            <option value="raw_semantic_equivalent">Raw versus semantic: equivalent midpoint vector</option>
+            <option value="raw_semantic_contrast">Raw versus semantic: intentionally different profiles</option>
+            <option value="superposition_lease">Superposition versus exclusive lease</option>
+          </select>
+          <label for="comparison-seed">Canonical decimal seed</label>
+          <input id="comparison-seed" name="comparison-seed" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="20" value="2026">
+          <div class="button-row comparison-buttons">
+            <button id="comparison-start-button" type="button">Start lockstep</button>
+            <button id="comparison-pause-button" type="button" disabled>Pause</button>
+            <button id="comparison-step-button" type="button">Step one input event</button>
+            <button id="comparison-reset-button" type="button">Reset both lanes</button>
+            <button id="comparison-replay-button" type="button">Replay full tape</button>
+          </div>
+        </form>
+
+        <p id="comparison-status" class="comparison-status" role="status" aria-live="polite">
+          Comparison ready. Both lanes are paused at their byte-identical canonical start.
+        </p>
+
+        <dl class="comparison-invariants" aria-label="Comparison invariants">
+          <div><dt>Progress</dt><dd id="comparison-progress">0 of 0 input events</dd></div>
+          <div><dt>Lane ticks</dt><dd id="comparison-ticks">0 / 0</dd></div>
+          <div><dt>Canonical start</dt><dd id="comparison-start-equality">Equal</dd></div>
+          <div><dt>Seed and tape</dt><dd id="comparison-shared-input">Shared</dd></div>
+          <div><dt>Mutable state</dt><dd id="comparison-isolation">Isolated</dd></div>
+          <div><dt>Resolved vectors</dt><dd id="comparison-vector-relation">Pending configuration</dd></div>
+        </dl>
+
+        <div class="comparison-lanes">
+          <article class="comparison-lane" aria-labelledby="comparison-left-title">
+            <header>
+              <h3 id="comparison-left-title">Lane A</h3>
+              <p id="comparison-left-config">Configuration pending</p>
+            </header>
+            <canvas id="comparison-left-canvas" width="640" height="420" role="img" aria-label="Lane A deterministic swarm projection"></canvas>
+            <dl class="comparison-vector" aria-label="Lane A resolved dynamics vector">
+              <div><dt>Rates A / C / S</dt><dd id="comparison-left-rates">0.00 / 0.00 / 0.00</dd></div>
+              <div><dt>Speed / damping / jitter</dt><dd id="comparison-left-extras">1.00 / 0.00 / 0.00</dd></div>
+            </dl>
+            <section aria-labelledby="comparison-left-evidence-title">
+              <h4 id="comparison-left-evidence-title">Catalogue and evidence</h4>
+              <p id="comparison-left-source">Catalogue entry pending.</p>
+              <dl class="comparison-evidence">
+                <div><dt>Evidence status</dt><dd id="comparison-left-evidence">—</dd></div>
+                <div><dt>Transfer boundary</dt><dd id="comparison-left-transfer">—</dd></div>
+                <div><dt>Non-claim</dt><dd id="comparison-left-nonclaim">—</dd></div>
+              </dl>
+            </section>
+            <section aria-labelledby="comparison-left-provenance-title">
+              <h4 id="comparison-left-provenance-title">Final-state provenance</h4>
+              <p id="comparison-left-provenance">Canonical start; no input event applied.</p>
+              <ul id="comparison-left-policy-state" class="comparison-policy-state">
+                <li>No active fields or leases.</li>
+              </ul>
+            </section>
+            <details>
+              <summary>Inspect Lane A input, action, policy, and receipt trace</summary>
+              <ol id="comparison-left-trace" class="comparison-trace">
+                <li>No comparison event applied.</li>
+              </ol>
+            </details>
+          </article>
+
+          <article class="comparison-lane" aria-labelledby="comparison-right-title">
+            <header>
+              <h3 id="comparison-right-title">Lane B</h3>
+              <p id="comparison-right-config">Configuration pending</p>
+            </header>
+            <canvas id="comparison-right-canvas" width="640" height="420" role="img" aria-label="Lane B deterministic swarm projection"></canvas>
+            <dl class="comparison-vector" aria-label="Lane B resolved dynamics vector">
+              <div><dt>Rates A / C / S</dt><dd id="comparison-right-rates">0.00 / 0.00 / 0.00</dd></div>
+              <div><dt>Speed / damping / jitter</dt><dd id="comparison-right-extras">1.00 / 0.00 / 0.00</dd></div>
+            </dl>
+            <section aria-labelledby="comparison-right-evidence-title">
+              <h4 id="comparison-right-evidence-title">Catalogue and evidence</h4>
+              <p id="comparison-right-source">Catalogue entry pending.</p>
+              <dl class="comparison-evidence">
+                <div><dt>Evidence status</dt><dd id="comparison-right-evidence">—</dd></div>
+                <div><dt>Transfer boundary</dt><dd id="comparison-right-transfer">—</dd></div>
+                <div><dt>Non-claim</dt><dd id="comparison-right-nonclaim">—</dd></div>
+              </dl>
+            </section>
+            <section aria-labelledby="comparison-right-provenance-title">
+              <h4 id="comparison-right-provenance-title">Final-state provenance</h4>
+              <p id="comparison-right-provenance">Canonical start; no input event applied.</p>
+              <ul id="comparison-right-policy-state" class="comparison-policy-state">
+                <li>No active fields or leases.</li>
+              </ul>
+            </section>
+            <details>
+              <summary>Inspect Lane B input, action, policy, and receipt trace</summary>
+              <ol id="comparison-right-trace" class="comparison-trace">
+                <li>No comparison event applied.</li>
+              </ol>
+            </details>
+          </article>
+        </div>
+
+        <div class="comparison-table-wrap" tabindex="0" aria-label="Scrollable comparison metrics table">
+          <table class="comparison-metrics">
+            <caption>Same-tick deterministic reconstruction measures; delta is Lane B minus Lane A.</caption>
+            <thead>
+              <tr><th scope="col">Measure and definition</th><th scope="col">Lane A</th><th scope="col">Lane B</th><th scope="col">Δ B−A</th></tr>
+            </thead>
+            <tbody id="comparison-metrics-body"></tbody>
+          </table>
+        </div>
+        <p id="comparison-claim-boundary" class="boundary-note">
+          Metric differences are deterministic reconstruction outcomes for the selected seed, input tape, and configurations. They are not research results.
+        </p>
+      </section>
+
       <section id="context" class="context shell" aria-labelledby="context-title">
         <h2 id="context-title">What this atlas preserves</h2>
         <div class="context-grid">
@@ -684,6 +813,6 @@
     <noscript>
       <p class="noscript-note">JavaScript and WebAssembly are required for the interactive reconstruction.</p>
     </noscript>
-    <script type="module" src="./app.js?v=semantic-v1"></script>
+    <script type="module" src="./app.js?v=comparison-v1"></script>
   </body>
 </html>

@@ -50,6 +50,23 @@ holder release is explicit, and fixed-step expiry is deterministic. Handoff is
 a two-action offer plus named-receiver accept/decline; acceptance changes only
 the holder and preserves the original expiry. One holder-gated behavior action
 makes authority consequences visible without reusing target-scope policy.
+Comparison mode is atlas-wide infrastructure rather than an eighth literature
+entry. A strict immutable comparison specification binds one canonical decimal
+seed, equal left/right seed copies, one scenario ID, and the exact versioned
+normalized-input tape ID. The runner clones one canonical `DemoCore` into two
+owned lane values, applies each input event transactionally to temporary lane
+clones, verifies seed and tick lockstep, then commits both or neither. The lanes
+share no mutable core, RNG progress, replay recorder, fields, leases, morphology,
+logs, metrics, or browser checkpoint registry.
+
+The equivalent raw/semantic profile uses one fixed comparison-only raw-vector
+mirror of the semantic midpoint. It has no caller-supplied coefficients and is
+not arbitrary parameter plumbing. The contrasting profile uses the established
+three raw rate actions and four semantic-quality actions. The authority profile
+maps the same two normalized synthetic influence requests either into two
+order-stable additive fields or an exclusive lease where the second operator's
+request and use fail closed. All profiles continue through the same reducer and
+simulation path.
 
 ## Non-scope
 
@@ -88,6 +105,7 @@ raw dynamics policy -- bounded global rates / deterministic weighted selection
 semantic dynamics policy -- bounded qualities / inspectable app-owned interpolation
 morphology policy -- canonical group IDs / conservation / formation scale
 lease policy -- exact holder / named receiver consent / fixed-step expiry
+comparison policy -- immutable scenario / isolated lanes / lockstep tape
         |
         v
 fixed-step deterministic flock state
@@ -163,6 +181,16 @@ clear authority. Reset clears leases and increments the revision. Snapshot and
 replay preserve acquisition tick, exclusive expiry, remaining lifetime,
 pending consent, holder, and revision exactly.
 
+The comparison contract uses
+`combinatorial.swarmability.comparison-spec.v1`,
+`combinatorial.swarmability.normalized-input-tape.v1`, versioned step receipts,
+and `combinatorial.swarmability.comparison-result.v1`. Specifications reject
+unknown fields, unsupported schemas, noncanonical or mismatched seeds, and tape
+IDs that do not belong to the selected profile. Input events and lane receipts
+are bounded. Reset reconstructs the canonical start; replay applies the complete
+immutable tape again. The browser owns only pause/run pacing and never supplies
+elapsed time to comparison cores.
+
 The Wasm adapter exposes one fixed-size row per member:
 
 ```text
@@ -198,6 +226,13 @@ polarization, spacing, speed, and relation counts expose consequences. Replay
 event/step totals, checkpoint count, and the
 bounded session operation log also have semantic DOM projections. Animation
 frames do not enter the live region or operation log.
+Comparison mode adds two labelled non-authoritative canvases plus a complete
+table and textual lane projections. Each lane names its public catalogue entry,
+configuration, source status, transfer boundary, non-claim, normalized input,
+semantic actions, policy, action receipts, final revision provenance, fields,
+leases, and behavior distribution. Same-tick cohesion, polarization, mean pair
+spacing, average speed, group count/sizes/extent, behavior counts, field/lease
+counts, and right-minus-left deltas include definitions and units.
 
 ## Validation
 
@@ -220,6 +255,11 @@ dynamics, checkpoints, reset, and replay,
 lease state-machine/damage matrices, fixed-step expiry boundaries, holder-only
 use, named-receiver consent, stale/replay resistance, caps, exact checkpoint/
 replay/reset, morphology lifecycle interactions, and cross-mechanism preservation,
+canonical comparison-start equality, same-spec determinism, equivalent and
+intentionally different vector profiles, immutable intended differences,
+lane/tick/seed/tape damage rejection, transactional isolation, bounded traces,
+lockstep step/reset/replay, superposition-versus-lease receipts and provenance,
+metric values and delta signs, and ordinary-atlas entry/exit preservation,
 Matter payload conversion, exact Git dependency pins, frozen builds, the Wasm
 bundle, public-boundary scans, and browser interaction/accessibility checks.
 
@@ -258,9 +298,15 @@ actions and payloads, not DOM or Canvas code.
 | Synthetic operators are mistaken for people or sessions | Four fixed labels have no account, storage, networking, or persistent identity contract |
 | Handoff silently reallocates authority | Holder offer and exact named-receiver accept/decline are separate revision-fenced actions |
 | Wall time or animation rate changes ownership | Lease lifetime and expiry use only deterministic fixed steps recorded in replay |
+| Comparison lanes contaminate one another | Two owned cores, transactional temporary clones, invariant checks, and separate traces/results |
+| Different starts masquerade as mapping effects | One canonical snapshot is cloned and byte equality plus seed/tick lockstep fail closed |
+| A metric delta looks like a research finding | Every table and result receipt labels it as an app-owned deterministic reconstruction outcome |
+| Comparison rewrites literature evidence | Each lane cites an unchanged accepted catalogue row with its own status, transfer boundary, and non-claim |
+| Comparison corrupts the ordinary atlas | A separate Wasm owner freezes ordinary animation and byte-checks ordinary state and frame rows on exit |
 
 ## Next slice
 
-Bind the reviewed lease/expiry/handoff reconstruction to its public catalogue
-entry, then continue with comparison mode. Optics integration,
-multi-user authority, and Quest adaptation remain separate later decisions.
+The planned seven-entry atlas and comparison tranche is complete. Input-device
+adapters, Pages deployment, LSL, Optics integration, live multi-user authority,
+and Quest adaptation remain separate later decisions and are not activated by
+this architecture.

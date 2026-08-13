@@ -1058,6 +1058,224 @@ a:focus-visible {
   width: 100%;
 }
 
+.comparison {
+  padding-block: clamp(2.5rem, 6vw, 4.5rem);
+  border-top: 1px solid var(--line);
+}
+
+.comparison-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+}
+
+.comparison-heading .secondary-button {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.comparison-controls {
+  display: grid;
+  grid-template-columns: max-content minmax(15rem, 1fr) max-content minmax(8rem, 0.35fr);
+  align-items: center;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-family: var(--font-ui);
+}
+
+.comparison-controls label {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.comparison-controls select,
+.comparison-controls input {
+  min-width: 0;
+  width: 100%;
+  padding-inline: 0.65rem;
+}
+
+.comparison-buttons {
+  grid-column: 1 / -1;
+}
+
+.comparison-status {
+  max-width: none;
+  margin: 0;
+  padding: 0.75rem 0;
+  color: var(--muted);
+  font: 0.9rem/1.45 var(--font-ui);
+}
+
+.comparison-status[data-error="true"] {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.comparison-invariants {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0 0 1rem;
+  border: 1px solid var(--line);
+  background: var(--line);
+  gap: 1px;
+}
+
+.comparison-invariants div {
+  min-width: 0;
+  padding: 0.65rem;
+  background: var(--surface);
+}
+
+.comparison-invariants dt,
+.comparison-vector dt,
+.comparison-evidence dt {
+  color: var(--muted);
+  font: 700 0.78rem/1.3 var(--font-ui);
+}
+
+.comparison-invariants dd,
+.comparison-vector dd,
+.comparison-evidence dd {
+  margin: 0.2rem 0 0;
+  overflow-wrap: anywhere;
+  font: 0.88rem/1.4 var(--font-ui);
+}
+
+.comparison-lanes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.comparison-lane {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.comparison-lane > header,
+.comparison-lane > section,
+.comparison-lane > details {
+  padding-block: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.comparison-lane > header {
+  padding-top: 0;
+}
+
+.comparison-lane > header p,
+.comparison-lane > section p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font: 0.88rem/1.45 var(--font-ui);
+}
+
+.comparison-lane canvas {
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.comparison-vector,
+.comparison-evidence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  padding: 1px;
+  background: var(--line);
+}
+
+.comparison-vector div,
+.comparison-evidence div {
+  min-width: 0;
+  padding: 0.6rem;
+  background: var(--bg);
+}
+
+.comparison-evidence {
+  grid-template-columns: 1fr;
+  margin-top: 0.6rem;
+}
+
+.comparison-policy-state,
+.comparison-trace {
+  margin: 0.5rem 0 0;
+  padding-left: 1.3rem;
+  font: 0.84rem/1.45 var(--font-ui);
+}
+
+.comparison-policy-state li + li,
+.comparison-trace li + li {
+  margin-top: 0.45rem;
+}
+
+.comparison-trace code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.comparison-lane summary {
+  cursor: pointer;
+  font: 700 0.9rem/1.4 var(--font-ui);
+}
+
+.comparison-table-wrap {
+  margin-top: 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--line-strong);
+}
+
+.comparison-table-wrap:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.comparison-metrics {
+  width: 100%;
+  min-width: 48rem;
+  border-collapse: collapse;
+  background: var(--surface);
+  font: 0.86rem/1.4 var(--font-ui);
+}
+
+.comparison-metrics caption {
+  padding: 0.7rem;
+  color: var(--muted);
+  text-align: left;
+}
+
+.comparison-metrics th,
+.comparison-metrics td {
+  padding: 0.65rem;
+  border-top: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.comparison-metrics th:last-child,
+.comparison-metrics td:last-child {
+  border-right: 0;
+}
+
+.comparison-metrics tbody th {
+  width: 42%;
+  font-weight: 700;
+}
+
+.comparison-metrics tbody th span {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .input-label {
   display: block;
   margin-bottom: 0.35rem;
@@ -1142,6 +1360,10 @@ a:focus-visible {
   .controls {
     order: -1;
   }
+
+  .comparison-invariants {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -1180,6 +1402,26 @@ a:focus-visible {
 
   .member-controls {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .comparison-heading {
+    display: block;
+  }
+
+  .comparison-heading .secondary-button {
+    width: 100%;
+  }
+
+  .comparison-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .comparison-buttons {
+    grid-column: 1;
+  }
+
+  .comparison-lanes {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1223,6 +1465,11 @@ a:focus-visible {
   .seed-row > button {
     flex: 1 1 8rem;
   }
+
+  .comparison-invariants,
+  .comparison-vector {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1250,6 +1497,12 @@ a:focus-visible {
   .resolved-inspector,
   .morphology-trace,
   .lease-trace,
+  .comparison-lane,
+  .comparison-invariants,
+  .comparison-controls,
+  .comparison-table-wrap,
+  .comparison-metrics th,
+  .comparison-metrics td,
   .mark-morphology,
   .coupling-table th,
   .coupling-table td {

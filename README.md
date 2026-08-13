@@ -42,6 +42,18 @@ fixed simulation steps in a strict bounded replay tape. Five named checkpoints
 can be saved and retrieved within the current browser tab; reset and replay use
 the same core rather than a duplicate browser simulation.
 
+Comparison mode creates two isolated deterministic cores from one byte-identical
+canonical start and applies one fixed normalized-input tape to both. The first
+profiles compare an explicit raw vector with semantic Space/Time/Weight/Flow,
+including one exact equivalent-vector case and one intentionally different case.
+A second profile compares two accepted synthetic personal fields with one
+exclusive per-member lease whose current holder causes a competing request to
+fail closed. Both lanes expose their catalogue entry, app-owned configuration,
+action/policy/receipt trace, field or lease provenance, same-tick measures, and
+Lane B minus Lane A deltas. These are deterministic reconstruction outcomes, not
+research results or evidence of live multi-user behavior. Entering and exiting
+comparison mode does not mutate the ordinary atlas engine.
+
 This is a reconstruction and research instrument, not an implementation by the
 authors of any cited work and not a universal interaction vocabulary. Its
 versioned public catalogue keeps source reports, evidence maturity, transfer
