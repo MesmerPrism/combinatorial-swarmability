@@ -1,9 +1,10 @@
 //! Integration coverage for the deterministic core and Matter handoff.
 
 use combinatorial_swarmability_demo_core::{
-    ActionCode, CollectiveBehavior, DemoCore, FieldLifetime, FieldPolarity, SemanticAction,
-    TargetScope, DEFAULT_DYNAMICS_RATES, FRAME_ROW_WIDTH, MAX_DYNAMICS_RATE,
-    MAX_FIELD_LIFETIME_STEPS, MAX_PERSONAL_FIELDS, MEMBER_COUNT,
+    ActionCode, CollectiveBehavior, DemoCore, DynamicsControlMode, FieldLifetime, FieldPolarity,
+    SemanticAction, TargetScope, DEFAULT_DYNAMICS_RATES, DEFAULT_SEMANTIC_QUALITIES,
+    FRAME_ROW_WIDTH, MAX_DYNAMICS_RATE, MAX_FIELD_LIFETIME_STEPS, MAX_PERSONAL_FIELDS,
+    MAX_SEMANTIC_QUALITY, MEMBER_COUNT,
 };
 use sha2::{Digest, Sha256};
 
@@ -49,6 +50,22 @@ fn set_cohesion(rate: f32) -> SemanticAction {
 
 fn set_separation(rate: f32) -> SemanticAction {
     SemanticAction::SetSeparation { rate }
+}
+
+fn set_space(value: f32) -> SemanticAction {
+    SemanticAction::SetSpaceQuality { value }
+}
+
+fn set_time(value: f32) -> SemanticAction {
+    SemanticAction::SetTimeQuality { value }
+}
+
+fn set_weight(value: f32) -> SemanticAction {
+    SemanticAction::SetWeightQuality { value }
+}
+
+fn set_flow(value: f32) -> SemanticAction {
+    SemanticAction::SetFlowQuality { value }
 }
 
 fn run_steps(core: &mut DemoCore, batches: usize) {
@@ -737,8 +754,254 @@ fn invalid_raw_dynamics_rates_and_damaged_state_fail_closed() {
     let mut damaged: serde_json::Value =
         serde_json::from_str(&core.snapshot_json().expect("snapshot serializes"))
             .expect("snapshot parses");
-    damaged["dynamics_rates"]["cohesion"] = serde_json::json!(1.5);
+    damaged["raw_dynamics_rates"]["cohesion"] = serde_json::json!(1.5);
     assert!(DemoCore::from_snapshot_json(&damaged.to_string()).is_err());
+}
+
+#[test]
+#[allow(clippy::float_cmp)] // Defaults are a serialized, exact public contract.
+fn semantic_quality_defaults_bounds_and_damaged_vectors_fail_closed() {
+    let mut core = DemoCore::new(2_020);
+    let initial = core.public_state();
+    assert_eq!(initial.dynamics_control_mode, DynamicsControlMode::Raw);
+    assert_eq!(initial.semantic_qualities, DEFAULT_SEMANTIC_QUALITIES);
+    assert_eq!(initial.raw_dynamics_rates, DEFAULT_DYNAMICS_RATES);
+    assert_eq!(initial.resolved_dynamics.rates, DEFAULT_DYNAMICS_RATES);
+    assert_eq!(initial.resolved_dynamics.speed_scale, 1.0);
+    assert_eq!(initial.resolved_dynamics.damping, 0.0);
+    assert_eq!(initial.resolved_dynamics.jitter, 0.0);
+
+    for action in [
+        set_space(-0.01),
+        set_time(MAX_SEMANTIC_QUALITY + 0.01),
+        set_weight(f32::NAN),
+        set_flow(f32::INFINITY),
+    ] {
+        let before = core.snapshot_json().expect("snapshot serializes");
+        let receipt = core.dispatch(action);
+        assert!(!receipt.accepted);
+        assert_eq!(receipt.code, ActionCode::InvalidSemanticQuality);
+        assert_eq!(before, core.snapshot_json().expect("snapshot serializes"));
+    }
+
+    assert!(serde_json::from_str::<SemanticAction>(
+        r#"{"type":"set_space_quality","value":0.5,"camera_pose":"reject"}"#
+    )
+    .is_err());
+
+    assert!(core.dispatch(set_space(0.7)).accepted);
+    let snapshot = core.snapshot_json().expect("snapshot serializes");
+    let mut damaged_quality: serde_json::Value =
+        serde_json::from_str(&snapshot).expect("snapshot parses");
+    damaged_quality["semantic_qualities"]["flow"] = serde_json::json!(1.2);
+    assert!(DemoCore::from_snapshot_json(&damaged_quality.to_string()).is_err());
+
+    let mut damaged_resolution: serde_json::Value =
+        serde_json::from_str(&snapshot).expect("snapshot parses");
+    damaged_resolution["resolved_dynamics"]["speed_scale"] = serde_json::json!(1.01);
+    assert!(DemoCore::from_snapshot_json(&damaged_resolution.to_string()).is_err());
+}
+
+#[test]
+#[allow(clippy::float_cmp)] // Qualitative-profile endpoints are an exact public contract.
+fn semantic_translation_preserves_reported_directions_and_app_owned_endpoints() {
+    let mut indirect = DemoCore::new(2_021);
+    assert!(indirect.dispatch(set_space(0.0)).accepted);
+    let indirect_vector = indirect.public_state().resolved_dynamics;
+    let mut direct = DemoCore::new(2_021);
+    assert!(direct.dispatch(set_space(1.0)).accepted);
+    let direct_vector = direct.public_state().resolved_dynamics;
+    assert_eq!(indirect_vector.rates.alignment, 0.15);
+    assert_eq!(direct_vector.rates.alignment, 0.85);
+    assert_eq!(indirect_vector.rates.separation, 0.85);
+    assert_eq!(direct_vector.rates.separation, 0.15);
+    assert!(direct_vector.rates.alignment > indirect_vector.rates.alignment);
+    assert!(direct_vector.rates.separation < indirect_vector.rates.separation);
+
+    let mut sustained = DemoCore::new(2_021);
+    assert!(sustained.dispatch(set_time(0.0)).accepted);
+    let mut sudden = DemoCore::new(2_021);
+    assert!(sudden.dispatch(set_time(1.0)).accepted);
+    assert_eq!(sustained.public_state().resolved_dynamics.speed_scale, 0.75);
+    assert_eq!(sudden.public_state().resolved_dynamics.speed_scale, 1.25);
+
+    let mut lower_weight = DemoCore::new(2_021);
+    assert!(lower_weight.dispatch(set_weight(0.0)).accepted);
+    let mut higher_weight = DemoCore::new(2_021);
+    assert!(higher_weight.dispatch(set_weight(1.0)).accepted);
+    assert_eq!(
+        lower_weight.public_state().resolved_dynamics.rates.cohesion,
+        0.85
+    );
+    assert_eq!(
+        higher_weight
+            .public_state()
+            .resolved_dynamics
+            .rates
+            .cohesion,
+        0.15
+    );
+
+    let mut bound = DemoCore::new(2_021);
+    assert!(bound.dispatch(set_flow(0.0)).accepted);
+    let mut free = DemoCore::new(2_021);
+    assert!(free.dispatch(set_flow(1.0)).accepted);
+    assert_eq!(bound.public_state().resolved_dynamics.damping, 0.75);
+    assert_eq!(free.public_state().resolved_dynamics.damping, 0.15);
+    assert_eq!(bound.public_state().resolved_dynamics.jitter, 0.0);
+    assert_eq!(free.public_state().resolved_dynamics.jitter, 0.18);
+}
+
+#[test]
+fn semantic_order_raw_inspection_checkpoint_replay_and_reset_are_exact() {
+    let ordered_actions = [
+        set_space(0.8),
+        set_time(0.7),
+        set_weight(0.2),
+        set_flow(0.9),
+    ];
+    let reverse_actions = [
+        set_flow(0.9),
+        set_weight(0.2),
+        set_time(0.7),
+        set_space(0.8),
+    ];
+
+    let mut ordered = DemoCore::new(2_022);
+    for action in ordered_actions {
+        assert!(ordered.dispatch(action).accepted);
+    }
+    assert!(
+        ordered
+            .dispatch(SemanticAction::SetScope {
+                scope: TargetScope::Swarm,
+            })
+            .accepted
+    );
+    assert!(
+        ordered
+            .dispatch(place_field(
+                5,
+                1,
+                -0.3,
+                0.2,
+                FieldPolarity::Repel,
+                FieldLifetime::Persistent,
+            ))
+            .accepted
+    );
+    run_steps(&mut ordered, 24);
+
+    let mut reverse = DemoCore::new(2_022);
+    for action in reverse_actions {
+        assert!(reverse.dispatch(action).accepted);
+    }
+    assert!(
+        reverse
+            .dispatch(SemanticAction::SetScope {
+                scope: TargetScope::Swarm,
+            })
+            .accepted
+    );
+    assert!(
+        reverse
+            .dispatch(place_field(
+                5,
+                1,
+                -0.3,
+                0.2,
+                FieldPolarity::Repel,
+                FieldLifetime::Persistent,
+            ))
+            .accepted
+    );
+    run_steps(&mut reverse, 24);
+
+    assert_eq!(
+        ordered.public_state().dynamics_control_mode,
+        DynamicsControlMode::Semantic
+    );
+    assert_eq!(
+        ordered.public_state().resolved_dynamics,
+        reverse.public_state().resolved_dynamics
+    );
+    assert_eq!(
+        ordered.snapshot_json().expect("snapshot serializes"),
+        reverse.snapshot_json().expect("snapshot serializes")
+    );
+
+    let before_inspection = ordered.snapshot_json().expect("snapshot serializes");
+    for _ in 0..100 {
+        let state = ordered.public_state();
+        assert_eq!(state.dynamics_rates, state.resolved_dynamics.rates);
+    }
+    assert_eq!(
+        before_inspection,
+        ordered.snapshot_json().expect("snapshot serializes")
+    );
+
+    let checkpoint = ordered.snapshot_json().expect("checkpoint serializes");
+    let restored = DemoCore::from_snapshot_json(&checkpoint).expect("checkpoint restores");
+    assert_eq!(
+        checkpoint,
+        restored.snapshot_json().expect("snapshot serializes")
+    );
+    let tape = ordered.replay_json().expect("semantic replay serializes");
+    let replayed = DemoCore::from_replay_json(&tape).expect("semantic replay reconstructs");
+    assert_eq!(
+        checkpoint,
+        replayed.snapshot_json().expect("snapshot serializes")
+    );
+
+    assert!(ordered.dispatch(SemanticAction::Reset).accepted);
+    let reset = ordered.public_state();
+    assert_eq!(reset.dynamics_control_mode, DynamicsControlMode::Raw);
+    assert_eq!(reset.semantic_qualities, DEFAULT_SEMANTIC_QUALITIES);
+    assert_eq!(reset.resolved_dynamics.rates, DEFAULT_DYNAMICS_RATES);
+    assert!(reset.fields.is_empty());
+}
+
+#[test]
+fn semantic_profiles_change_same_seed_distribution_speed_spacing_and_polarization() {
+    let mut compact = DemoCore::new(2_023);
+    for action in [
+        set_space(0.0),
+        set_time(0.0),
+        set_weight(0.0),
+        set_flow(0.0),
+    ] {
+        assert!(compact.dispatch(action).accepted);
+    }
+    run_steps(&mut compact, 40);
+
+    let mut expansive = DemoCore::new(2_023);
+    for action in [
+        set_space(1.0),
+        set_time(1.0),
+        set_weight(1.0),
+        set_flow(1.0),
+    ] {
+        assert!(expansive.dispatch(action).accepted);
+    }
+    run_steps(&mut expansive, 40);
+
+    let compact_state = compact.public_state();
+    let expansive_state = expansive.public_state();
+    assert!(compact_state.average_speed < expansive_state.average_speed);
+    assert!(compact_state.behavior_counts.cohere > expansive_state.behavior_counts.cohere);
+    assert!(compact_state.behavior_counts.disperse > expansive_state.behavior_counts.disperse);
+    assert!(expansive_state.behavior_counts.flock > compact_state.behavior_counts.flock);
+
+    let compact_rows = compact.frame_rows().expect("compact rows project");
+    let expansive_rows = expansive.frame_rows().expect("expansive rows project");
+    let spacing_delta =
+        (mean_pair_distance(&compact_rows) - mean_pair_distance(&expansive_rows)).abs();
+    let polarization_delta = (polarization(&compact_rows) - polarization(&expansive_rows)).abs();
+    assert!(spacing_delta > 0.005, "spacing delta was {spacing_delta}");
+    assert!(
+        polarization_delta > 0.02,
+        "polarization delta was {polarization_delta}"
+    );
 }
 
 #[test]

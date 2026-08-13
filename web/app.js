@@ -1,4 +1,4 @@
-import init, { DemoEngine } from "./pkg/demo_wasm.js?v=dynamics-v1";
+import init, { DemoEngine } from "./pkg/demo_wasm.js?v=semantic-v1";
 
 const DEFAULT_SEED = "2026";
 const SPEED_DELTA = 0.10;
@@ -28,6 +28,10 @@ const fieldSelect = document.querySelector("#field-select");
 const dynamicsAlignment = document.querySelector("#dynamics-alignment");
 const dynamicsCohesion = document.querySelector("#dynamics-cohesion");
 const dynamicsSeparation = document.querySelector("#dynamics-separation");
+const semanticSpace = document.querySelector("#semantic-space");
+const semanticTime = document.querySelector("#semantic-time");
+const semanticWeight = document.querySelector("#semantic-weight");
+const semanticFlow = document.querySelector("#semantic-flow");
 const atlasFilters = document.querySelector("#atlas-filters");
 const atlasList = document.querySelector("#atlas-list");
 const atlasCount = document.querySelector("#atlas-count");
@@ -46,7 +50,7 @@ let reducedTimestamp = 0;
 let rowWidth = 0;
 
 await init({
-  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=dynamics-v1", import.meta.url),
+  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=semantic-v1", import.meta.url),
 });
 engine = new DemoEngine(DEFAULT_SEED);
 rowWidth = DemoEngine.frame_row_width();
@@ -159,6 +163,10 @@ function bindControls() {
   bindDynamicsSlider(dynamicsAlignment, "set_alignment", "alignment");
   bindDynamicsSlider(dynamicsCohesion, "set_cohesion", "cohesion");
   bindDynamicsSlider(dynamicsSeparation, "set_separation", "separation");
+  bindSemanticSlider(semanticSpace, "set_space_quality", "space");
+  bindSemanticSlider(semanticTime, "set_time_quality", "time");
+  bindSemanticSlider(semanticWeight, "set_weight_quality", "weight");
+  bindSemanticSlider(semanticFlow, "set_flow_quality", "flow");
   checkpointSelect.addEventListener("change", () => {
     const checkpoint = savedCheckpoints.get(checkpointSelect.value);
     if (checkpoint) {
@@ -238,7 +246,31 @@ function bindDynamicsSlider(slider, actionType, parameter) {
       {
         inputRoute: slider.dataset.inputRoute || "synthetic-slider",
         normalizedInput: `dynamics.${parameter}.rate(${rate.toFixed(2)})`,
-        policy: "Swarm-wide endogenous dynamics; deterministic weighted transition selection; no multi-user combination",
+        policy: "Raw controls take authority over the one resolved vector; swarm-wide deterministic transition selection; no multi-user combination",
+      }
+    );
+    delete slider.dataset.inputRoute;
+  });
+}
+
+function bindSemanticSlider(slider, actionType, quality) {
+  slider.addEventListener("pointerdown", (event) => {
+    slider.dataset.inputRoute = event.pointerType || "pointer";
+  });
+  slider.addEventListener("keydown", () => {
+    slider.dataset.inputRoute = "keyboard-or-switch";
+  });
+  slider.addEventListener("input", () => {
+    updateSemanticOutput(quality, Number(slider.value));
+  });
+  slider.addEventListener("change", () => {
+    const value = Number(slider.value);
+    dispatch(
+      { type: actionType, value },
+      {
+        inputRoute: slider.dataset.inputRoute || "synthetic-slider",
+        normalizedInput: `semantic-dynamics.${quality}(${value.toFixed(2)})`,
+        policy: "Semantic controls take authority over one app-owned resolved vector; swarm-wide effect; no camera or multi-user authority",
       }
     );
     delete slider.dataset.inputRoute;
@@ -284,10 +316,43 @@ function updateDynamicsControls() {
     separation: dynamicsSeparation,
   };
   Object.entries(controlsByParameter).forEach(([parameter, slider]) => {
-    const rate = state.dynamics_rates[parameter];
+    const rate = state.raw_dynamics_rates[parameter];
     slider.value = String(rate);
     updateDynamicsOutput(parameter, rate);
   });
+}
+
+function updateSemanticOutput(quality, value) {
+  document.querySelector(`#semantic-${quality}-value`).textContent = value.toFixed(2);
+}
+
+function updateSemanticControls() {
+  const controlsByQuality = {
+    space: semanticSpace,
+    time: semanticTime,
+    weight: semanticWeight,
+    flow: semanticFlow,
+  };
+  Object.entries(controlsByQuality).forEach(([quality, slider]) => {
+    const value = state.semantic_qualities[quality];
+    slider.value = String(value);
+    updateSemanticOutput(quality, value);
+  });
+}
+
+function dynamicsModeLabel() {
+  return state.dynamics_control_mode === "semantic" ? "Semantic qualities" : "Raw controls";
+}
+
+function renderResolvedDynamics() {
+  const vector = state.resolved_dynamics;
+  document.querySelector("#resolved-control-mode").textContent = dynamicsModeLabel();
+  document.querySelector("#resolved-alignment").textContent = vector.rates.alignment.toFixed(2);
+  document.querySelector("#resolved-cohesion").textContent = vector.rates.cohesion.toFixed(2);
+  document.querySelector("#resolved-separation").textContent = vector.rates.separation.toFixed(2);
+  document.querySelector("#resolved-speed-scale").textContent = vector.speed_scale.toFixed(2);
+  document.querySelector("#resolved-damping").textContent = vector.damping.toFixed(2);
+  document.querySelector("#resolved-jitter").textContent = vector.jitter.toFixed(2);
 }
 
 function placePersonalField(event) {
@@ -708,8 +773,11 @@ function updateDomState(updateControls = true) {
   document.querySelector("#state-seed").textContent = state.seed;
   document.querySelector("#state-speed").textContent = state.average_speed.toFixed(3);
   document.querySelector("#state-behaviors").textContent = behaviorMixLabel();
+  document.querySelector("#state-dynamics-mode").textContent = dynamicsModeLabel();
   document.querySelector("#state-dynamics-rates").textContent =
     `A ${state.dynamics_rates.alignment.toFixed(2)} · C ${state.dynamics_rates.cohesion.toFixed(2)} · S ${state.dynamics_rates.separation.toFixed(2)}`;
+  document.querySelector("#state-semantic-qualities").textContent =
+    `S ${state.semantic_qualities.space.toFixed(2)} · T ${state.semantic_qualities.time.toFixed(2)} · W ${state.semantic_qualities.weight.toFixed(2)} · F ${state.semantic_qualities.flow.toFixed(2)}`;
   document.querySelector("#state-relations").textContent = String(relationTotal);
   document.querySelector("#state-field-count").textContent = `${state.fields.length} of ${MAX_PERSONAL_FIELDS}`;
   document.querySelector("#state-contributor-count").textContent = `${state.active_contributor_count} of ${CONTRIBUTOR_LABELS.length}`;
@@ -733,11 +801,12 @@ function updateDomState(updateControls = true) {
   document.querySelector("#step-button").disabled = state.running;
   document.querySelector("#start-button").disabled = state.running;
   document.querySelector("#pause-button").disabled = !state.running;
+  renderResolvedDynamics();
   updateHistoryControls();
   updateFieldControls();
   canvas.setAttribute(
     "aria-label",
-    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. Raw dynamics rates ${state.dynamics_rates.alignment.toFixed(2)}, ${state.dynamics_rates.cohesion.toFixed(2)}, ${state.dynamics_rates.separation.toFixed(2)}. ${state.fields.length} additive personal fields.`
+    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. ${dynamicsModeLabel()} resolve alignment ${state.resolved_dynamics.rates.alignment.toFixed(2)}, cohesion ${state.resolved_dynamics.rates.cohesion.toFixed(2)}, separation ${state.resolved_dynamics.rates.separation.toFixed(2)}, speed scale ${state.resolved_dynamics.speed_scale.toFixed(2)}, damping ${state.resolved_dynamics.damping.toFixed(2)}, and jitter ${state.resolved_dynamics.jitter.toFixed(2)}. ${state.fields.length} additive personal fields.`
   );
   updateMotionMode();
 
@@ -748,6 +817,7 @@ function updateDomState(updateControls = true) {
     }
     seedInput.value = state.seed;
     updateDynamicsControls();
+    updateSemanticControls();
   }
 }
 

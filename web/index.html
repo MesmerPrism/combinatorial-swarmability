@@ -44,7 +44,7 @@
           <p>
             Filter the public catalogue, then inspect what a source reports and what
             this atlas reconstructs. Scope, additive personal fields, raw
-            dynamics, and deterministic history are interactive in this slice.
+            dynamics, semantic movement qualities, and deterministic history are interactive in this slice.
           </p>
         </div>
 
@@ -154,13 +154,14 @@
 
       <section id="demonstration" class="demo shell" aria-labelledby="demo-title">
         <div class="section-heading">
-          <h2 id="demo-title">Interactive reconstruction: scope, fields, dynamics, and history</h2>
+          <h2 id="demo-title">Interactive reconstruction: scope, fields, semantic dynamics, and history</h2>
           <p>
             Start intentionally, choose one member, the subgroup, or the whole swarm,
             then issue the same collective request through accessible browser controls.
             Place additive personal fields with explicit polarity and lifetime,
-            or expose bounded raw mode-transition rates. Save, retrieve, reset,
-            and replay operate across the same deterministic core.
+            expose bounded raw mode-transition rates, or translate Space, Time,
+            Weight, and Flow into one inspectable raw vector. Save, retrieve,
+            reset, and replay operate across the same deterministic core.
           </p>
         </div>
 
@@ -205,7 +206,9 @@
                 <div><dt>Average speed</dt><dd id="state-speed">0.360</dd></div>
                 <div><dt>Update mode</dt><dd id="state-motion-mode">Standard</dd></div>
                 <div><dt>Collective rules</dt><dd id="state-behaviors">24 flock</dd></div>
-                <div><dt>Raw dynamics rates</dt><dd id="state-dynamics-rates">A 0.00 · C 0.00 · S 0.00</dd></div>
+                <div><dt>Dynamics authority</dt><dd id="state-dynamics-mode">Raw controls</dd></div>
+                <div><dt>Effective transition rates</dt><dd id="state-dynamics-rates">A 0.00 · C 0.00 · S 0.00</dd></div>
+                <div><dt>Semantic qualities</dt><dd id="state-semantic-qualities">S 0.50 · T 0.50 · W 0.50 · F 0.50</dd></div>
                 <div><dt>Neighbour links</dt><dd id="state-relations">0</dd></div>
                 <div><dt>Personal fields</dt><dd id="state-field-count">0 of 8</dd></div>
                 <div><dt>Synthetic contributors</dt><dd id="state-contributor-count">0 of 4</dd></div>
@@ -310,6 +313,9 @@
                 Range 0.00–1.00 transition per member-second; default 0.00 disables automatic transitions.
                 Active rates combine by deterministic weighted selection. There is no hidden randomness control.
               </p>
+              <p class="control-help">
+                Moving a raw slider gives raw controls authority and returns speed scale, damping, and jitter to their neutral values.
+              </p>
               <div class="dynamics-control">
                 <label for="dynamics-alignment">Alignment / enter Flock <output id="dynamics-alignment-value" for="dynamics-alignment">0.00</output></label>
                 <input id="dynamics-alignment" name="dynamics-alignment" type="range" min="0" max="1" step="0.05" value="0">
@@ -332,6 +338,62 @@
                 </ul>
                 <p>Current Flock / Cohere / Disperse distribution: <strong id="flow-distribution">24 / 0 / 0</strong></p>
               </section>
+            </fieldset>
+
+            <fieldset id="semantic-dynamics-controls">
+              <legend>Semantic movement qualities</legend>
+              <p class="control-help">
+                These 0–1 sliders reconstruct reported Space, Time, Weight, and Flow relationships through transparent,
+                app-owned qualitative interpolation. They are a synthetic input route—not camera or body tracking—and
+                not a validated universal Laban interpreter.
+              </p>
+              <div class="dynamics-control semantic-control">
+                <label for="semantic-space">Space: Indirect → Direct <output id="semantic-space-value" for="semantic-space">0.50</output></label>
+                <input id="semantic-space" name="semantic-space" type="range" min="0" max="1" step="0.05" value="0.5">
+              </div>
+              <div class="dynamics-control semantic-control">
+                <label for="semantic-time">Time: Sustained → Sudden <output id="semantic-time-value" for="semantic-time">0.50</output></label>
+                <input id="semantic-time" name="semantic-time" type="range" min="0" max="1" step="0.05" value="0.5">
+              </div>
+              <div class="dynamics-control semantic-control">
+                <label for="semantic-weight">Weight: Lower/compressed → Higher <output id="semantic-weight-value" for="semantic-weight">0.50</output></label>
+                <input id="semantic-weight" name="semantic-weight" type="range" min="0" max="1" step="0.05" value="0.5">
+              </div>
+              <div class="dynamics-control semantic-control">
+                <label for="semantic-flow">Flow: Bound → Free <output id="semantic-flow-value" for="semantic-flow">0.50</output></label>
+                <input id="semantic-flow" name="semantic-flow" type="range" min="0" max="1" step="0.05" value="0.5">
+              </div>
+
+              <details id="semantic-raw-inspector" class="resolved-inspector" open>
+                <summary>Inspect resolved raw parameter vector and couplings</summary>
+                <p>
+                  Inspection is read-only. The source projection supports the directions and couplings below, but not portable coefficients;
+                  numeric endpoints and linear interpolation are explicitly app-owned.
+                </p>
+                <dl class="resolved-vector">
+                  <div><dt>Control authority</dt><dd id="resolved-control-mode">Raw controls</dd></div>
+                  <div><dt>Alignment rate</dt><dd id="resolved-alignment">0.00</dd></div>
+                  <div><dt>Cohesion rate</dt><dd id="resolved-cohesion">0.00</dd></div>
+                  <div><dt>Separation rate</dt><dd id="resolved-separation">0.00</dd></div>
+                  <div><dt>Speed scale</dt><dd id="resolved-speed-scale">1.00</dd></div>
+                  <div><dt>Damping</dt><dd id="resolved-damping">0.00</dd></div>
+                  <div><dt>Jitter</dt><dd id="resolved-jitter">0.00</dd></div>
+                </dl>
+                <table class="coupling-table">
+                  <caption>Reported direction, resolved parameter, and app-owned profile</caption>
+                  <thead><tr><th>Quality</th><th>Resolved coupling</th><th>Qualitative endpoints</th></tr></thead>
+                  <tbody>
+                    <tr><th scope="row">Space</th><td>Alignment ↑; separation ↓</td><td>0.15→0.85; 0.85→0.15</td></tr>
+                    <tr><th scope="row">Time</th><td>Speed scale ↑</td><td>0.75→1.25</td></tr>
+                    <tr><th scope="row">Weight</th><td>Cohesion ↓</td><td>0.85→0.15</td></tr>
+                    <tr><th scope="row">Flow</th><td>Damping ↓; jitter ↑</td><td>0.75→0.15; 0.00→0.18</td></tr>
+                  </tbody>
+                </table>
+              </details>
+              <p class="control-help evidence-boundary">
+                Evidence boundary: the reported study evaluated perception of pre-rendered clips. This reconstruction does not reproduce
+                the authors’ runtime or establish live control, accessibility, multi-user agency, or authorship.
+              </p>
             </fieldset>
 
             <fieldset>
@@ -471,6 +533,6 @@
     <noscript>
       <p class="noscript-note">JavaScript and WebAssembly are required for the interactive reconstruction.</p>
     </noscript>
-    <script type="module" src="./app.js?v=dynamics-v1"></script>
+    <script type="module" src="./app.js?v=semantic-v1"></script>
   </body>
 </html>

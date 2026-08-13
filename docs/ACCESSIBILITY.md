@@ -18,6 +18,9 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Native range inputs expose the three labelled raw dynamics rates. Arrow keys
   provide the same bounded semantic actions as pointer adjustment, and the
   deterministic replay tape is the synthetic route for exact repetition.
+- Four native range inputs expose Space, Time, Weight, and Flow without a
+  camera, pose tracker, timed gesture, or continuous pointing requirement.
+  Arrow keys and deterministic replay are equivalent synthetic routes.
 - The member grid exposes primary and subgroup selection without requiring
   precise canvas pointing.
 - Catalogue facets are labelled native selects with one clear-filter action.
@@ -48,6 +51,10 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Alignment, cohesion, and separation rates plus the live Flock/Cohere/Disperse
   distribution are ordinary text; parameter consequences also remain visible
   through cohesion, polarization, spacing, and relation metrics.
+- Semantic values, active raw-or-semantic control authority, and the resolved
+  alignment, cohesion, separation, speed-scale, damping, and jitter vector are
+  structured text. The native expandable inspector can be opened or closed
+  without dispatching an action or changing simulation state.
 - The canvas has a concise text description and is never focus-required.
 - Focus indicators are explicit; forced-colors and 200% zoom layouts are
   supported.
@@ -64,6 +71,7 @@ The canvas is a visual projection, not the sole interface or state authority.
 
 Desktop and mobile checks cover keyboard selection/action, pointer selection,
 scope-aware collective rules, field placement/motion/polarity/lifetime,
-raw dynamics sliders and mode-distribution consequences, focus visibility,
+raw and semantic dynamics sliders, resolved-vector and mode-distribution
+consequences, inspection without state drift, focus visibility,
 reduced-motion state, intentional start, pause, single-step, reset/replay, and
 horizontal overflow.

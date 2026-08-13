@@ -709,6 +709,85 @@ canvas {
   margin-bottom: 0;
 }
 
+.semantic-control:first-of-type {
+  margin-top: 0.8rem;
+}
+
+.resolved-inspector {
+  margin-top: 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--surface);
+  font-family: var(--font-ui);
+  font-size: 0.86rem;
+}
+
+.resolved-inspector summary {
+  min-height: 2.75rem;
+  padding: 0.55rem 0;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.resolved-inspector > p {
+  margin-top: 0.35rem;
+}
+
+.resolved-vector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0.75rem 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.resolved-vector div {
+  padding: 0.55rem 0.65rem;
+  background: var(--surface);
+}
+
+.resolved-vector dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.resolved-vector dd {
+  margin: 0.2rem 0 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.coupling-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.79rem;
+}
+
+.coupling-table caption {
+  margin-bottom: 0.4rem;
+  color: var(--muted);
+  text-align: left;
+}
+
+.coupling-table th,
+.coupling-table td {
+  padding: 0.45rem;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.evidence-boundary {
+  margin-top: 0.9rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--accent);
+}
+
 #place-field-button {
   width: 100%;
   margin: 0.35rem 0 0.8rem;
@@ -1016,6 +1095,15 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .resolved-vector {
+    grid-template-columns: 1fr;
+  }
+
+  .coupling-table {
+    display: block;
+    overflow-x: auto;
+  }
+
   .button-row > button,
   .seed-row > button {
     flex: 1 1 8rem;
@@ -1043,7 +1131,10 @@ a:focus-visible {
   .member-control,
   .atlas-filters,
   .atlas-detail,
-  .atlas-list {
+  .atlas-list,
+  .resolved-inspector,
+  .coupling-table th,
+  .coupling-table td {
     border-color: CanvasText;
   }
 

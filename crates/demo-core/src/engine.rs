@@ -6,8 +6,9 @@ use rusty_matter_particles::{ParticleRenderPayload, ParticleSet, ParticleState};
 use serde::{Deserialize, Serialize};
 
 use crate::action::{
-    ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, DynamicsRates, FieldLifetime,
-    FieldPolarity, FieldSummary, MemberSummary, PublicState, SemanticAction, TargetScope,
+    ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, DynamicsControlMode,
+    DynamicsRates, FieldLifetime, FieldPolarity, FieldSummary, MemberSummary, PublicState,
+    ResolvedDynamics, SemanticAction, SemanticQualities, TargetScope,
 };
 use crate::replay::{
     validate_replay_tape, ReplayEvent, ReplayRecorder, ReplayTape, MAX_REPLAY_JSON_BYTES,
@@ -34,6 +35,34 @@ pub const DEFAULT_DYNAMICS_RATES: DynamicsRates = DynamicsRates {
     cohesion: 0.0,
     separation: 0.0,
 };
+/// Minimum accepted semantic quality.
+pub const MIN_SEMANTIC_QUALITY: f32 = 0.0;
+/// Maximum accepted semantic quality.
+pub const MAX_SEMANTIC_QUALITY: f32 = 1.0;
+/// Midpoint defaults retained until a semantic action activates the profile.
+pub const DEFAULT_SEMANTIC_QUALITIES: SemanticQualities = SemanticQualities {
+    space: 0.5,
+    time: 0.5,
+    weight: 0.5,
+    flow: 0.5,
+};
+
+// App-owned qualitative interpolation endpoints. The source projection supplies
+// directions and coupled variables, not portable coefficients.
+const INDIRECT_ALIGNMENT_RATE: f32 = 0.15;
+const DIRECT_ALIGNMENT_RATE: f32 = 0.85;
+const INDIRECT_SEPARATION_RATE: f32 = 0.85;
+const DIRECT_SEPARATION_RATE: f32 = 0.15;
+const LOWER_WEIGHT_COHESION_RATE: f32 = 0.85;
+const HIGHER_WEIGHT_COHESION_RATE: f32 = 0.15;
+const SUSTAINED_SPEED_SCALE: f32 = 0.75;
+const SUDDEN_SPEED_SCALE: f32 = 1.25;
+const BOUND_FLOW_DAMPING: f32 = 0.75;
+const FREE_FLOW_DAMPING: f32 = 0.15;
+const BOUND_FLOW_JITTER: f32 = 0.0;
+const FREE_FLOW_JITTER: f32 = 0.18;
+const MAX_RESOLVED_DAMPING: f32 = BOUND_FLOW_DAMPING;
+const MAX_RESOLVED_JITTER: f32 = FREE_FLOW_JITTER;
 
 const DEFAULT_SUBGROUP_COUNT: usize = 6;
 const MEMBER_COUNT_F32: f32 = 24.0;
@@ -105,7 +134,10 @@ struct DemoSnapshot {
     particles: ParticleSet,
     speed_offsets: Vec<f32>,
     behaviors: Vec<CollectiveBehavior>,
-    dynamics_rates: DynamicsRates,
+    raw_dynamics_rates: DynamicsRates,
+    dynamics_control_mode: DynamicsControlMode,
+    semantic_qualities: SemanticQualities,
+    resolved_dynamics: ResolvedDynamics,
     fields: Vec<FieldState>,
     scope: TargetScope,
     primary_member: Option<u16>,
@@ -231,6 +263,10 @@ impl DemoCore {
             SemanticAction::SetAlignment { rate } => self.set_alignment(rate),
             SemanticAction::SetCohesion { rate } => self.set_cohesion(rate),
             SemanticAction::SetSeparation { rate } => self.set_separation(rate),
+            SemanticAction::SetSpaceQuality { value } => self.set_space_quality(value),
+            SemanticAction::SetTimeQuality { value } => self.set_time_quality(value),
+            SemanticAction::SetWeightQuality { value } => self.set_weight_quality(value),
+            SemanticAction::SetFlowQuality { value } => self.set_flow_quality(value),
             SemanticAction::PlaceField {
                 field_id,
                 contributor_id,
@@ -357,11 +393,11 @@ impl DemoCore {
             target_members: targets,
             average_speed: round_for_public(speed_total / MEMBER_COUNT_F32),
             behavior_counts,
-            dynamics_rates: DynamicsRates {
-                alignment: round_for_public(self.snapshot.dynamics_rates.alignment),
-                cohesion: round_for_public(self.snapshot.dynamics_rates.cohesion),
-                separation: round_for_public(self.snapshot.dynamics_rates.separation),
-            },
+            dynamics_rates: public_rates(self.snapshot.resolved_dynamics.rates),
+            raw_dynamics_rates: public_rates(self.snapshot.raw_dynamics_rates),
+            dynamics_control_mode: self.snapshot.dynamics_control_mode,
+            semantic_qualities: public_qualities(self.snapshot.semantic_qualities),
+            resolved_dynamics: public_resolved(self.snapshot.resolved_dynamics),
             fields,
             active_contributor_count,
             state_revision: self.snapshot.state_revision,
@@ -560,7 +596,8 @@ impl DemoCore {
                 "Alignment rate must be finite and between 0 and 1 transition per member-second.",
             );
         }
-        self.snapshot.dynamics_rates.alignment = rate;
+        self.snapshot.raw_dynamics_rates.alignment = rate;
+        self.activate_raw_dynamics();
         self.bump_state();
         self.accepted(
             ActionCode::AlignmentSet,
@@ -576,7 +613,8 @@ impl DemoCore {
                 "Cohesion rate must be finite and between 0 and 1 transition per member-second.",
             );
         }
-        self.snapshot.dynamics_rates.cohesion = rate;
+        self.snapshot.raw_dynamics_rates.cohesion = rate;
+        self.activate_raw_dynamics();
         self.bump_state();
         self.accepted(
             ActionCode::CohesionSet,
@@ -592,13 +630,93 @@ impl DemoCore {
                 "Separation rate must be finite and between 0 and 1 transition per member-second.",
             );
         }
-        self.snapshot.dynamics_rates.separation = rate;
+        self.snapshot.raw_dynamics_rates.separation = rate;
+        self.activate_raw_dynamics();
         self.bump_state();
         self.accepted(
             ActionCode::SeparationSet,
             format!("Set the swarm-wide separation-mode entry rate to {rate:.2}."),
             Vec::new(),
         )
+    }
+
+    fn set_space_quality(&mut self, value: f32) -> ActionReceipt {
+        if !valid_semantic_quality(value) {
+            return self.rejected(
+                ActionCode::InvalidSemanticQuality,
+                "Space quality must be finite and between 0 and 1.",
+            );
+        }
+        self.snapshot.semantic_qualities.space = value;
+        self.activate_semantic_dynamics();
+        self.bump_state();
+        self.accepted(
+            ActionCode::SpaceQualitySet,
+            format!("Set Space to {value:.2} and resolved the semantic dynamics vector."),
+            Vec::new(),
+        )
+    }
+
+    fn set_time_quality(&mut self, value: f32) -> ActionReceipt {
+        if !valid_semantic_quality(value) {
+            return self.rejected(
+                ActionCode::InvalidSemanticQuality,
+                "Time quality must be finite and between 0 and 1.",
+            );
+        }
+        self.snapshot.semantic_qualities.time = value;
+        self.activate_semantic_dynamics();
+        self.bump_state();
+        self.accepted(
+            ActionCode::TimeQualitySet,
+            format!("Set Time to {value:.2} and resolved the semantic dynamics vector."),
+            Vec::new(),
+        )
+    }
+
+    fn set_weight_quality(&mut self, value: f32) -> ActionReceipt {
+        if !valid_semantic_quality(value) {
+            return self.rejected(
+                ActionCode::InvalidSemanticQuality,
+                "Weight quality must be finite and between 0 and 1.",
+            );
+        }
+        self.snapshot.semantic_qualities.weight = value;
+        self.activate_semantic_dynamics();
+        self.bump_state();
+        self.accepted(
+            ActionCode::WeightQualitySet,
+            format!("Set Weight to {value:.2} and resolved the semantic dynamics vector."),
+            Vec::new(),
+        )
+    }
+
+    fn set_flow_quality(&mut self, value: f32) -> ActionReceipt {
+        if !valid_semantic_quality(value) {
+            return self.rejected(
+                ActionCode::InvalidSemanticQuality,
+                "Flow quality must be finite and between 0 and 1.",
+            );
+        }
+        self.snapshot.semantic_qualities.flow = value;
+        self.activate_semantic_dynamics();
+        self.bump_state();
+        self.accepted(
+            ActionCode::FlowQualitySet,
+            format!("Set Flow to {value:.2} and resolved the semantic dynamics vector."),
+            Vec::new(),
+        )
+    }
+
+    fn activate_raw_dynamics(&mut self) {
+        self.snapshot.dynamics_control_mode = DynamicsControlMode::Raw;
+        self.snapshot.resolved_dynamics = resolve_raw_dynamics(self.snapshot.raw_dynamics_rates);
+    }
+
+    fn activate_semantic_dynamics(&mut self) {
+        self.snapshot.dynamics_control_mode = DynamicsControlMode::Semantic;
+        self.snapshot.resolved_dynamics =
+            resolve_semantic_dynamics(self.snapshot.semantic_qualities);
     }
 
     fn place_field(
@@ -816,6 +934,8 @@ impl DemoCore {
     fn step_simulation(&mut self) {
         let source = self.snapshot.particles.particles.clone();
         let fields = self.snapshot.fields.clone();
+        let resolved = self.snapshot.resolved_dynamics;
+        let next_tick = self.snapshot.tick.saturating_add(1);
         let swarm_centroid = particle_centroid(&source);
         let mut next = source.clone();
         for (index, particle) in source.iter().enumerate() {
@@ -840,8 +960,9 @@ impl DemoCore {
                 }
             }
 
-            let target_speed =
-                (BASE_SPEED + self.snapshot.speed_offsets[index]).clamp(MIN_SPEED, MAX_SPEED);
+            let target_speed = ((BASE_SPEED + self.snapshot.speed_offsets[index])
+                * resolved.speed_scale)
+                .clamp(MIN_SPEED, MAX_SPEED);
             let mut flock_acceleration = Vec3::ZERO;
             if neighbor_count > 0 {
                 let inverse_count = 1.0 / f32::from(neighbor_count);
@@ -887,23 +1008,25 @@ impl DemoCore {
                     flock_acceleration * 0.38 + collective_steering * 2.4 + separation * 0.055
                 }
             };
-            let acceleration = behavior_acceleration
-                + personal_field_acceleration(particle.position, &fields)
+            let steering_response = 1.0 - resolved.damping * 0.6;
+            let controlled_acceleration =
+                behavior_acceleration + personal_field_acceleration(particle.position, &fields);
+            let jitter = deterministic_jitter(
+                self.snapshot.seed,
+                next_tick,
+                u64::try_from(index).unwrap_or_default(),
+                resolved.jitter,
+            );
+            let acceleration = controlled_acceleration * steering_response
+                + jitter
                 + soft_boundary_acceleration(particle.position, particle.velocity, target_speed);
 
-            let mut velocity = particle.velocity + acceleration * FIXED_STEP_SECONDS;
-            velocity = normalized_or(velocity, particle.velocity) * target_speed;
-            let mut position = particle.position + velocity * FIXED_STEP_SECONDS;
-            contain_axis(&mut position.x, &mut velocity.x);
-            contain_axis(&mut position.y, &mut velocity.y);
-            position.z = 0.0;
-            velocity.z = 0.0;
+            let (position, velocity) = integrate_particle(particle, acceleration, target_speed);
 
             next[index].position = position;
             next[index].velocity = velocity;
             next[index].age_seconds = particle.age_seconds + FIXED_STEP_SECONDS;
         }
-        let next_tick = self.snapshot.tick.saturating_add(1);
         self.apply_dynamics_transitions(next_tick);
         self.snapshot.tick = next_tick;
         let tick = self.snapshot.tick;
@@ -916,7 +1039,7 @@ impl DemoCore {
     }
 
     fn apply_dynamics_transitions(&mut self, tick: u64) {
-        let rates = self.snapshot.dynamics_rates;
+        let rates = self.snapshot.resolved_dynamics.rates;
         let total_rate = rates.alignment + rates.cohesion + rates.separation;
         if total_rate <= f32::EPSILON {
             return;
@@ -1100,6 +1223,93 @@ fn valid_dynamics_rate(rate: f32) -> bool {
     rate.is_finite() && (MIN_DYNAMICS_RATE..=MAX_DYNAMICS_RATE).contains(&rate)
 }
 
+fn valid_semantic_quality(value: f32) -> bool {
+    value.is_finite() && (MIN_SEMANTIC_QUALITY..=MAX_SEMANTIC_QUALITY).contains(&value)
+}
+
+fn valid_semantic_qualities(qualities: SemanticQualities) -> bool {
+    valid_semantic_quality(qualities.space)
+        && valid_semantic_quality(qualities.time)
+        && valid_semantic_quality(qualities.weight)
+        && valid_semantic_quality(qualities.flow)
+}
+
+fn valid_resolved_dynamics(resolved: ResolvedDynamics) -> bool {
+    valid_dynamics_rate(resolved.rates.alignment)
+        && valid_dynamics_rate(resolved.rates.cohesion)
+        && valid_dynamics_rate(resolved.rates.separation)
+        && resolved.speed_scale.is_finite()
+        && (SUSTAINED_SPEED_SCALE..=SUDDEN_SPEED_SCALE).contains(&resolved.speed_scale)
+        && resolved.damping.is_finite()
+        && (0.0..=MAX_RESOLVED_DAMPING).contains(&resolved.damping)
+        && resolved.jitter.is_finite()
+        && (0.0..=MAX_RESOLVED_JITTER).contains(&resolved.jitter)
+}
+
+fn interpolate(start: f32, end: f32, value: f32) -> f32 {
+    (end - start).mul_add(value, start)
+}
+
+fn resolve_raw_dynamics(rates: DynamicsRates) -> ResolvedDynamics {
+    ResolvedDynamics {
+        rates,
+        speed_scale: 1.0,
+        damping: 0.0,
+        jitter: 0.0,
+    }
+}
+
+fn resolve_semantic_dynamics(qualities: SemanticQualities) -> ResolvedDynamics {
+    ResolvedDynamics {
+        rates: DynamicsRates {
+            alignment: interpolate(
+                INDIRECT_ALIGNMENT_RATE,
+                DIRECT_ALIGNMENT_RATE,
+                qualities.space,
+            ),
+            cohesion: interpolate(
+                LOWER_WEIGHT_COHESION_RATE,
+                HIGHER_WEIGHT_COHESION_RATE,
+                qualities.weight,
+            ),
+            separation: interpolate(
+                INDIRECT_SEPARATION_RATE,
+                DIRECT_SEPARATION_RATE,
+                qualities.space,
+            ),
+        },
+        speed_scale: interpolate(SUSTAINED_SPEED_SCALE, SUDDEN_SPEED_SCALE, qualities.time),
+        damping: interpolate(BOUND_FLOW_DAMPING, FREE_FLOW_DAMPING, qualities.flow),
+        jitter: interpolate(BOUND_FLOW_JITTER, FREE_FLOW_JITTER, qualities.flow),
+    }
+}
+
+fn public_rates(rates: DynamicsRates) -> DynamicsRates {
+    DynamicsRates {
+        alignment: round_for_public(rates.alignment),
+        cohesion: round_for_public(rates.cohesion),
+        separation: round_for_public(rates.separation),
+    }
+}
+
+fn public_qualities(qualities: SemanticQualities) -> SemanticQualities {
+    SemanticQualities {
+        space: round_for_public(qualities.space),
+        time: round_for_public(qualities.time),
+        weight: round_for_public(qualities.weight),
+        flow: round_for_public(qualities.flow),
+    }
+}
+
+fn public_resolved(resolved: ResolvedDynamics) -> ResolvedDynamics {
+    ResolvedDynamics {
+        rates: public_rates(resolved.rates),
+        speed_scale: round_for_public(resolved.speed_scale),
+        damping: round_for_public(resolved.damping),
+        jitter: round_for_public(resolved.jitter),
+    }
+}
+
 fn deterministic_unit(seed: u64, tick: u64, member: u64, stream: u64) -> f32 {
     let mut value = seed
         ^ tick.wrapping_mul(0x9e37_79b9_7f4a_7c15)
@@ -1110,6 +1320,15 @@ fn deterministic_unit(seed: u64, tick: u64, member: u64, stream: u64) -> f32 {
     value ^= value >> 31;
     let bits = u16::try_from(value >> 48).unwrap_or_default();
     f32::from(bits) / (f32::from(u16::MAX) + 1.0)
+}
+
+fn deterministic_jitter(seed: u64, tick: u64, member: u64, amplitude: f32) -> Vec3 {
+    if amplitude <= f32::EPSILON {
+        return Vec3::ZERO;
+    }
+    let x = deterministic_unit(seed, tick, member, 2).mul_add(2.0, -1.0);
+    let y = deterministic_unit(seed, tick, member, 3).mul_add(2.0, -1.0);
+    normalized_or(Vec3::new(x, y, 0.0), Vec3::ZERO) * amplitude
 }
 
 fn initial_snapshot(seed: u64) -> DemoSnapshot {
@@ -1139,7 +1358,10 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
         particles,
         speed_offsets: vec![0.0; MEMBER_COUNT],
         behaviors: vec![CollectiveBehavior::Flock; MEMBER_COUNT],
-        dynamics_rates: DEFAULT_DYNAMICS_RATES,
+        raw_dynamics_rates: DEFAULT_DYNAMICS_RATES,
+        dynamics_control_mode: DynamicsControlMode::Raw,
+        semantic_qualities: DEFAULT_SEMANTIC_QUALITIES,
+        resolved_dynamics: resolve_raw_dynamics(DEFAULT_DYNAMICS_RATES),
         fields: Vec::new(),
         scope: TargetScope::Member,
         primary_member: Some(0),
@@ -1173,14 +1395,7 @@ fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
             "unexpected collective-behavior count",
         ));
     }
-    if !valid_dynamics_rate(snapshot.dynamics_rates.alignment)
-        || !valid_dynamics_rate(snapshot.dynamics_rates.cohesion)
-        || !valid_dynamics_rate(snapshot.dynamics_rates.separation)
-    {
-        return Err(DemoError::InvalidSnapshot(
-            "raw dynamics rate is outside the accepted range",
-        ));
-    }
+    validate_snapshot_dynamics(snapshot)?;
     if snapshot.fields.len() > MAX_PERSONAL_FIELDS {
         return Err(DemoError::InvalidSnapshot("too many personal fields"));
     }
@@ -1237,6 +1452,52 @@ fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
         return Err(DemoError::InvalidSnapshot("accumulator is out of range"));
     }
     Ok(())
+}
+
+fn validate_snapshot_dynamics(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
+    if !valid_dynamics_rate(snapshot.raw_dynamics_rates.alignment)
+        || !valid_dynamics_rate(snapshot.raw_dynamics_rates.cohesion)
+        || !valid_dynamics_rate(snapshot.raw_dynamics_rates.separation)
+    {
+        return Err(DemoError::InvalidSnapshot(
+            "raw dynamics rate is outside the accepted range",
+        ));
+    }
+    if !valid_semantic_qualities(snapshot.semantic_qualities) {
+        return Err(DemoError::InvalidSnapshot(
+            "semantic quality is outside the accepted range",
+        ));
+    }
+    if !valid_resolved_dynamics(snapshot.resolved_dynamics) {
+        return Err(DemoError::InvalidSnapshot(
+            "resolved dynamics vector is outside the accepted range",
+        ));
+    }
+    let expected_resolved = match snapshot.dynamics_control_mode {
+        DynamicsControlMode::Raw => resolve_raw_dynamics(snapshot.raw_dynamics_rates),
+        DynamicsControlMode::Semantic => resolve_semantic_dynamics(snapshot.semantic_qualities),
+    };
+    if snapshot.resolved_dynamics != expected_resolved {
+        return Err(DemoError::InvalidSnapshot(
+            "resolved dynamics vector does not match its control owner",
+        ));
+    }
+    Ok(())
+}
+
+fn integrate_particle(
+    particle: &ParticleState,
+    acceleration: Vec3,
+    target_speed: f32,
+) -> (Vec3, Vec3) {
+    let mut velocity = particle.velocity + acceleration * FIXED_STEP_SECONDS;
+    velocity = normalized_or(velocity, particle.velocity) * target_speed;
+    let mut position = particle.position + velocity * FIXED_STEP_SECONDS;
+    contain_axis(&mut position.x, &mut velocity.x);
+    contain_axis(&mut position.y, &mut velocity.y);
+    position.z = 0.0;
+    velocity.z = 0.0;
+    (position, velocity)
 }
 
 fn valid_member(member_id: u16) -> bool {

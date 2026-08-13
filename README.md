@@ -13,7 +13,14 @@ expiring lifetimes and synthetic contributor provenance. Three explicit
 swarm-wide rates can deterministically move members among the existing Flock,
 Cohere, and Disperse modes; they default to zero and are presented as an
 app-owned technical analogy rather than a reproduced robot controller. The core
-projects simulation state through Rusty Matter's
+also accepts bounded Space, Time, Weight, and Flow qualities. These compile by
+transparent app-owned qualitative interpolation into the same effective
+alignment, cohesion, separation, speed-scale, damping, and jitter vector used
+by raw controls—there is no second simulation path. The browser shows both the
+semantic values and every resolved parameter. This reconstructs reported
+relationships from a perception study of pre-rendered clips; it is not the
+authors' runtime, live body control, or a validated universal Laban interpreter.
+The same core projects simulation state through Rusty Matter's
 renderer-neutral `ParticleRenderPayload`; a thin WebAssembly adapter exposes a
 bounded frame buffer to a Canvas2D renderer. The canvas is not the only
 information or interaction surface.

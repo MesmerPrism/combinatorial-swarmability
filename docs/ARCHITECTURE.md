@@ -27,6 +27,14 @@ per member-second and defaults to 0.00, so this mechanism does not alter the
 accepted scene until explicitly activated. It is an app-owned technical
 analogy to endogenous transition controls, not a reproduction of the source's
 exploration/task/other robot-state model.
+Semantic dynamics controls expose bounded 0–1 Space, Time, Weight, and Flow
+qualities. The source projection supplies qualitative directions and
+couplings, but no portable coefficients, so the app uses documented linear
+interpolation between app-owned endpoints. Space couples alignment and
+separation, Time scales speed, Weight couples cohesion, and Flow couples
+damping and deterministic jitter. Semantic and raw controls select the owner
+of one explicit `ResolvedDynamics` vector consumed by the established core;
+they never select different simulation implementations.
 
 ## Non-scope
 
@@ -62,6 +70,7 @@ SemanticAction (route-free intent)
 scope and authority policy -- selection revision / resolved targets
 field combination policy -- bounded additive superposition / expiry
 raw dynamics policy -- bounded global rates / deterministic weighted selection
+semantic dynamics policy -- bounded qualities / inspectable app-owned interpolation
         |
         v
 fixed-step deterministic flock state
@@ -93,6 +102,16 @@ randomness control. At each fixed step, a pure seed/tick/member draw applies
 the combined per-second rate and chooses one existing collective mode by the
 three weights. This makes parameter order irrelevant while keeping same-seed
 state transitions, checkpoints, and replay exact.
+
+Semantic dynamics actions are four explicit route-free setters: Space, Time,
+Weight, and Flow. Updating any one quality resolves the complete current
+semantic profile into the same raw transition rates and the minimal effective
+speed-scale, damping, and deterministic-jitter additions. Switching a raw rate
+returns those additions to neutral and gives raw controls authority. Snapshot
+validation recomputes the vector from its owner and rejects mismatches, so no
+hidden translated state can drift across inspection, checkpoint, or replay.
+Jitter is a pure seed/tick/member stream, not runtime entropy. The browser's
+expandable inspector dispatches no action and therefore cannot mutate state.
 
 The core also owns a strict `combinatorial.swarmability.replay.v1` tape. It
 records accepted semantic actions plus the fixed-step counts actually executed
@@ -127,7 +146,10 @@ It also shows the latest input route, normalized input, semantic action, policy
 resolution, core receipt, cohesion, polarization, nearest spacing, speed, and
 subgroup membership. Active field count, contributor count, position,
 polarity, and lifetime also have non-canvas projections. The three raw rates
-and current Flock/Cohere/Disperse distribution are text, while cohesion,
+and current Flock/Cohere/Disperse distribution are text. Semantic quality
+values, active control authority, all six resolved quantities, and the
+source-supported/app-owned coupling distinction are also ordinary DOM text,
+while cohesion,
 polarization, spacing, speed, and relation counts expose consequences. Replay
 event/step totals, checkpoint count, and the
 bounded session operation log also have semantic DOM projections. Animation
@@ -143,6 +165,10 @@ trips and damaged replay rejection, additive-field order independence,
 bounded/damaged fields, expiry/removal, same-seed metrics, and cross-mechanism
 reset/replay, raw-rate bounds and damaged input rejection, parameter-order
 independence, deterministic state distributions, and same-seed metric effects,
+semantic bounds/defaults and damaged-vector rejection, deterministic
+translation and qualitative monotonicity, action-order independence,
+raw-vector equivalence, inspection stability, same-seed outcome differences,
+and coexistence with scope, fields, checkpoint, reset, and replay,
 Matter payload conversion, exact Git dependency pins, frozen builds, the Wasm
 bundle, public-boundary scans, and browser interaction/accessibility checks.
 
@@ -171,9 +197,13 @@ actions and payloads, not DOM or Canvas code.
 | A technical analogy is presented as source reproduction | UI and catalogue non-claims distinguish app-owned Flock/Cohere/Disperse rates from the source robot-state model |
 | Arbitrary parameter plumbing hides unstable behavior | Only three named rate actions exist, with fixed 0.00–1.00 bounds and zero defaults |
 | Runtime randomness breaks comparison or replay | Transition draws are pure functions of seed, fixed tick, member ID, and stream ID |
+| Semantic labels hide a second simulation path | Raw and semantic actions resolve one explicit vector consumed by the established core |
+| Invented coefficients look source-authored | The UI labels interpolation endpoints as app-owned and preserves the source's qualitative directions separately |
+| Inspecting translation changes the experiment | The resolved-vector panel is a read-only DOM projection with no reducer action |
+| A rendered-clip perception study is presented as live control evidence | The UI and catalogue state that live control, accessibility, agency, authorship, and a universal interpreter were not evaluated |
 
 ## Next slice
 
-Continue with semantic/Laban dynamics while keeping it a distinct semantic
-mapping over inspectable raw rates. Optics integration,
+Bind the reviewed semantic/Laban reconstruction to its public catalogue entry,
+then continue with split, merge, and rescale. Optics integration,
 multi-user authority, and Quest adaptation remain separate later decisions.

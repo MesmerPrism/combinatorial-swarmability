@@ -39,6 +39,44 @@ pub struct DynamicsRates {
     pub separation: f32,
 }
 
+/// Which app-owned control surface currently owns the resolved dynamics vector.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicsControlMode {
+    /// Explicit raw rate actions own the effective vector.
+    Raw,
+    /// Space, Time, Weight, and Flow compile into the effective vector.
+    Semantic,
+}
+
+/// Bounded semantic movement-quality values.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SemanticQualities {
+    /// Indirect (0) to Direct (1).
+    pub space: f32,
+    /// Sustained (0) to Sudden (1).
+    pub time: f32,
+    /// Lower/compressed (0) to higher (1) value used by the source mapping.
+    pub weight: f32,
+    /// Bound (0) to Free (1).
+    pub flow: f32,
+}
+
+/// Complete app-owned vector consumed by the one deterministic simulation path.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResolvedDynamics {
+    /// Effective rates for entering Flock, Cohere, and Disperse modes.
+    pub rates: DynamicsRates,
+    /// Global multiplier applied after member-level preferred-speed adjustments.
+    pub speed_scale: f32,
+    /// Bounded reduction in steering response.
+    pub damping: f32,
+    /// Bounded deterministic heading perturbation amplitude.
+    pub jitter: f32,
+}
+
 /// Direction of one app-local synthetic personal field.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -131,6 +169,26 @@ pub enum SemanticAction {
         /// Bounded transitions per member-second.
         rate: f32,
     },
+    /// Set the bounded semantic Space quality and resolve the complete raw vector.
+    SetSpaceQuality {
+        /// Indirect (0) to Direct (1).
+        value: f32,
+    },
+    /// Set the bounded semantic Time quality and resolve the complete raw vector.
+    SetTimeQuality {
+        /// Sustained (0) to Sudden (1).
+        value: f32,
+    },
+    /// Set the bounded semantic Weight quality and resolve the complete raw vector.
+    SetWeightQuality {
+        /// Lower/compressed (0) to higher (1) mapped value.
+        value: f32,
+    },
+    /// Set the bounded semantic Flow quality and resolve the complete raw vector.
+    SetFlowQuality {
+        /// Bound (0) to Free (1).
+        value: f32,
+    },
     /// Place one bounded field with synthetic contributor provenance.
     PlaceField {
         /// Stable field identifier within the scene.
@@ -212,6 +270,18 @@ enum SemanticActionWire {
     SetSeparation {
         rate: f32,
     },
+    SetSpaceQuality {
+        value: f32,
+    },
+    SetTimeQuality {
+        value: f32,
+    },
+    SetWeightQuality {
+        value: f32,
+    },
+    SetFlowQuality {
+        value: f32,
+    },
     PlaceField {
         field_id: u16,
         contributor_id: u8,
@@ -270,6 +340,10 @@ impl<'de> Deserialize<'de> for SemanticAction {
             SemanticActionWire::SetAlignment { rate } => Self::SetAlignment { rate },
             SemanticActionWire::SetCohesion { rate } => Self::SetCohesion { rate },
             SemanticActionWire::SetSeparation { rate } => Self::SetSeparation { rate },
+            SemanticActionWire::SetSpaceQuality { value } => Self::SetSpaceQuality { value },
+            SemanticActionWire::SetTimeQuality { value } => Self::SetTimeQuality { value },
+            SemanticActionWire::SetWeightQuality { value } => Self::SetWeightQuality { value },
+            SemanticActionWire::SetFlowQuality { value } => Self::SetFlowQuality { value },
             SemanticActionWire::PlaceField {
                 field_id,
                 contributor_id,
@@ -321,6 +395,14 @@ pub enum ActionCode {
     CohesionSet,
     /// Swarm-wide separation-mode entry rate changed.
     SeparationSet,
+    /// Semantic Space quality changed and resolved into the raw vector.
+    SpaceQualitySet,
+    /// Semantic Time quality changed and resolved into the raw vector.
+    TimeQualitySet,
+    /// Semantic Weight quality changed and resolved into the raw vector.
+    WeightQualitySet,
+    /// Semantic Flow quality changed and resolved into the raw vector.
+    FlowQualitySet,
     /// A bounded personal field was placed.
     FieldPlaced,
     /// An existing personal field was moved.
@@ -349,6 +431,8 @@ pub enum ActionCode {
     InvalidSpeedDelta,
     /// A raw dynamics rate was non-finite or outside its explicit range.
     InvalidDynamicsRate,
+    /// A semantic quality was non-finite or outside the normalized range.
+    InvalidSemanticQuality,
     /// The requested field identifier is outside the bounded scene contract.
     InvalidFieldId,
     /// A field already uses the requested identifier.
@@ -452,8 +536,16 @@ pub struct PublicState {
     pub average_speed: f32,
     /// Current distribution of collective steering rules.
     pub behavior_counts: BehaviorCounts,
-    /// Swarm-wide app-owned collective-mode entry rates.
+    /// Effective collective-mode entry rates retained for the existing raw view.
     pub dynamics_rates: DynamicsRates,
+    /// Raw rate values retained when semantic control owns the effective vector.
+    pub raw_dynamics_rates: DynamicsRates,
+    /// Current owner of the effective raw dynamics vector.
+    pub dynamics_control_mode: DynamicsControlMode,
+    /// Current semantic values, whether or not semantic mode is active.
+    pub semantic_qualities: SemanticQualities,
+    /// Complete effective vector consumed by deterministic stepping.
+    pub resolved_dynamics: ResolvedDynamics,
     /// Active additive personal fields in stable identifier order.
     pub fields: Vec<FieldSummary>,
     /// Number of app-local synthetic contributor channels currently represented.

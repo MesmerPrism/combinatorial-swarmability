@@ -26,11 +26,17 @@ $requiredIds = @(
     'metric-fields', 'field-state-list', 'field-contributor', 'field-polarity',
     'field-lifetime', 'field-x', 'field-y', 'field-select',
     'place-field-button', 'move-field-button', 'polarity-field-button',
-    'remove-field-button', 'state-dynamics-rates', 'metric-distribution',
+    'remove-field-button', 'state-dynamics-mode', 'state-dynamics-rates',
+    'state-semantic-qualities', 'metric-distribution',
     'dynamics-alignment', 'dynamics-alignment-value', 'dynamics-cohesion',
     'dynamics-cohesion-value', 'dynamics-separation', 'dynamics-separation-value',
     'dynamics-flow-title', 'flow-alignment-rate', 'flow-cohesion-rate',
-    'flow-separation-rate', 'flow-distribution'
+    'flow-separation-rate', 'flow-distribution', 'semantic-dynamics-controls',
+    'semantic-space', 'semantic-space-value', 'semantic-time', 'semantic-time-value',
+    'semantic-weight', 'semantic-weight-value', 'semantic-flow', 'semantic-flow-value',
+    'semantic-raw-inspector', 'resolved-control-mode', 'resolved-alignment',
+    'resolved-cohesion', 'resolved-separation', 'resolved-speed-scale',
+    'resolved-damping', 'resolved-jitter'
 )
 foreach ($id in $requiredIds) {
     if ($html -notmatch "id=[`"']$([regex]::Escape($id))[`"']") {
@@ -57,13 +63,20 @@ if ($script -notmatch 'fetch\("\./data/catalog\.v1\.json"' -or $script -match 'c
 if ($styles -notmatch '\[hidden\]\s*\{[^}]*display:\s*none\s*!important') {
     throw 'Author styles must preserve the native hidden state for planned entry actions.'
 }
+if ($styles -notmatch '@media\s*\(prefers-reduced-motion:\s*reduce\)' -or
+    $styles -notmatch '@media\s*\(forced-colors:\s*active\)' -or
+    $styles -notmatch '(?s)@media\s*\(forced-colors:\s*active\).*\.resolved-inspector') {
+    throw 'Semantic dynamics must retain reduced-motion and forced-colors contracts.'
+}
 foreach ($functionName in @(
     'populateAtlasFilters', 'renderAtlasList', 'renderAtlasDetail',
     'updateActionTrace', 'outcomeMetrics', 'saveCheckpoint',
     'retrieveCheckpoint', 'replayCurrentRun', 'renderSessionHistory',
     'placePersonalField', 'moveSelectedField', 'setSelectedFieldPolarity',
     'removeSelectedField', 'renderFieldStateList', 'drawPersonalFields',
-    'bindDynamicsSlider', 'updateDynamicsControls', 'updateDynamicsOutput'
+    'bindDynamicsSlider', 'updateDynamicsControls', 'updateDynamicsOutput',
+    'bindSemanticSlider', 'updateSemanticControls', 'updateSemanticOutput',
+    'renderResolvedDynamics'
 )) {
     if ($script -notmatch "function\s+$functionName\s*\(") {
         throw "Atlas adapter is missing $functionName."
@@ -96,6 +109,11 @@ foreach ($dynamicsAction in @('set_alignment', 'set_cohesion', 'set_separation')
         throw "The accessible raw dynamics adapter is missing semantic action: $dynamicsAction"
     }
 }
+foreach ($semanticAction in @('set_space_quality', 'set_time_quality', 'set_weight_quality', 'set_flow_quality')) {
+    if ($script -notmatch [regex]::Escape($semanticAction)) {
+        throw "The accessible semantic dynamics adapter is missing semantic action: $semanticAction"
+    }
+}
 if ($script -match 'set_randomness') {
     throw 'Raw dynamics must not expose an arbitrary randomness parameter.'
 }
@@ -104,6 +122,19 @@ foreach ($parameter in @('alignment', 'cohesion', 'separation')) {
     if ($html -notmatch $pattern) {
         throw "Raw dynamics slider $parameter must preserve the accepted range, step, and default."
     }
+}
+foreach ($quality in @('space', 'time', 'weight', 'flow')) {
+    $pattern = "id=[`"']semantic-$quality[`"'][^>]*min=[`"']0[`"'][^>]*max=[`"']1[`"'][^>]*step=[`"']0\.05[`"'][^>]*value=[`"']0\.5[`"']"
+    if ($html -notmatch $pattern) {
+        throw "Semantic dynamics slider $quality must preserve the accepted range, step, and default."
+    }
+}
+if ($script -match '(?:getUserMedia|MediaPipe|DeviceMotionEvent|requestPermission)') {
+    throw 'The semantic dynamics slice must not request or imply a live camera or motion adapter.'
+}
+if ($script -notmatch 'state\.raw_dynamics_rates\[parameter\]' -or
+    $script -notmatch 'state\.resolved_dynamics') {
+    throw 'Raw controls and the effective resolved dynamics vector must remain separately inspectable.'
 }
 if ($script -notmatch 'event instanceof PointerEvent && event\.detail > 0') {
     throw 'The input adapter must distinguish keyboard-generated PointerEvent clicks from physical pointer input.'
@@ -130,4 +161,4 @@ foreach ($item in @($catalog.items)) {
     }
 }
 
-Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, and four bound reconstructions.'
+Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, four bound reconstructions, and inspectable semantic dynamics.'
