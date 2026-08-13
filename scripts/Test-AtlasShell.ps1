@@ -22,7 +22,11 @@ $requiredIds = @(
     'metric-relations', 'state-replay-events', 'state-checkpoint-count',
     'checkpoint-name', 'checkpoint-select', 'save-checkpoint-button',
     'retrieve-checkpoint-button', 'replay-button', 'reset-button',
-    'history-events'
+    'history-events', 'state-field-count', 'state-contributor-count',
+    'metric-fields', 'field-state-list', 'field-contributor', 'field-polarity',
+    'field-lifetime', 'field-x', 'field-y', 'field-select',
+    'place-field-button', 'move-field-button', 'polarity-field-button',
+    'remove-field-button'
 )
 foreach ($id in $requiredIds) {
     if ($html -notmatch "id=[`"']$([regex]::Escape($id))[`"']") {
@@ -52,7 +56,9 @@ if ($styles -notmatch '\[hidden\]\s*\{[^}]*display:\s*none\s*!important') {
 foreach ($functionName in @(
     'populateAtlasFilters', 'renderAtlasList', 'renderAtlasDetail',
     'updateActionTrace', 'outcomeMetrics', 'saveCheckpoint',
-    'retrieveCheckpoint', 'replayCurrentRun', 'renderSessionHistory'
+    'retrieveCheckpoint', 'replayCurrentRun', 'renderSessionHistory',
+    'placePersonalField', 'moveSelectedField', 'setSelectedFieldPolarity',
+    'removeSelectedField', 'renderFieldStateList', 'drawPersonalFields'
 )) {
     if ($script -notmatch "function\s+$functionName\s*\(") {
         throw "Atlas adapter is missing $functionName."
@@ -70,6 +76,15 @@ if ($script -notmatch 'const MAX_CHECKPOINTS = 5;' -or
 }
 if ($script -match '(?:localStorage|sessionStorage|indexedDB)') {
     throw 'The first history slice must remain session-local and in memory.'
+}
+if ($script -notmatch 'const MAX_PERSONAL_FIELDS = 8;' -or
+    $script -notmatch 'const CONTRIBUTOR_LABELS = \["A", "B", "C", "D"\];') {
+    throw 'Personal fields must remain bounded to eight sources and four synthetic contributor channels.'
+}
+foreach ($fieldAction in @('place_field', 'move_field', 'set_field_polarity', 'remove_field')) {
+    if ($script -notmatch [regex]::Escape($fieldAction)) {
+        throw "The accessible field adapter is missing semantic action: $fieldAction"
+    }
 }
 if ($script -notmatch 'event instanceof PointerEvent && event\.detail > 0') {
     throw 'The input adapter must distinguish keyboard-generated PointerEvent clicks from physical pointer input.'
@@ -91,4 +106,4 @@ foreach ($item in @($catalog.items)) {
     }
 }
 
-Write-Host 'Atlas shell contract passed: seven filter facets, source/evidence/transfer cards, action provenance, metrics, and two enabled reconstructions.'
+Write-Host 'Atlas shell contract passed: seven facets, evidence cards, action provenance, metrics, two bound reconstructions, and bounded additive-field controls.'

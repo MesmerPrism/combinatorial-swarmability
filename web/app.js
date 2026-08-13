@@ -1,10 +1,13 @@
-import init, { DemoEngine } from "./pkg/demo_wasm.js?v=history-v1";
+import init, { DemoEngine } from "./pkg/demo_wasm.js?v=fields-v1";
 
 const DEFAULT_SEED = "2026";
 const SPEED_DELTA = 0.10;
 const RELATION_RADIUS_SQUARED = 0.34 * 0.34;
 const MAX_CHECKPOINTS = 5;
 const MAX_SESSION_HISTORY = 50;
+const MAX_PERSONAL_FIELDS = 8;
+const CONTRIBUTOR_LABELS = ["A", "B", "C", "D"];
+const CONTRIBUTOR_COLORS = ["#3f6f85", "#a85d45", "#657a46", "#755b9b"];
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const canvas = document.querySelector("#swarm-canvas");
@@ -16,6 +19,12 @@ const seedInput = document.querySelector("#seed-input");
 const checkpointNameInput = document.querySelector("#checkpoint-name");
 const checkpointSelect = document.querySelector("#checkpoint-select");
 const historyEvents = document.querySelector("#history-events");
+const fieldContributor = document.querySelector("#field-contributor");
+const fieldPolarity = document.querySelector("#field-polarity");
+const fieldLifetime = document.querySelector("#field-lifetime");
+const fieldX = document.querySelector("#field-x");
+const fieldY = document.querySelector("#field-y");
+const fieldSelect = document.querySelector("#field-select");
 const atlasFilters = document.querySelector("#atlas-filters");
 const atlasList = document.querySelector("#atlas-list");
 const atlasCount = document.querySelector("#atlas-count");
@@ -34,7 +43,7 @@ let reducedTimestamp = 0;
 let rowWidth = 0;
 
 await init({
-  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=history-v1", import.meta.url),
+  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=fields-v1", import.meta.url),
 });
 engine = new DemoEngine(DEFAULT_SEED);
 rowWidth = DemoEngine.frame_row_width();
@@ -134,6 +143,16 @@ function bindControls() {
   document.querySelector("#save-checkpoint-button").addEventListener("click", saveCheckpoint);
   document.querySelector("#retrieve-checkpoint-button").addEventListener("click", retrieveCheckpoint);
   document.querySelector("#replay-button").addEventListener("click", replayCurrentRun);
+  document.querySelector("#place-field-button").addEventListener("click", placePersonalField);
+  document.querySelector("#move-field-button").addEventListener("click", moveSelectedField);
+  document.querySelector("#polarity-field-button").addEventListener("click", setSelectedFieldPolarity);
+  document.querySelector("#remove-field-button").addEventListener("click", removeSelectedField);
+  fieldX.addEventListener("input", updateFieldOutputs);
+  fieldY.addEventListener("input", updateFieldOutputs);
+  fieldSelect.addEventListener("change", () => {
+    syncSelectedFieldEditor();
+    updateFieldControls();
+  });
   checkpointSelect.addEventListener("change", () => {
     const checkpoint = savedCheckpoints.get(checkpointSelect.value);
     if (checkpoint) {
@@ -222,6 +241,125 @@ function setBehavior(behavior, trace) {
     behavior,
     expected_selection_revision: state.selection_revision,
   }, trace);
+}
+
+function placePersonalField(event) {
+  if (state.fields.length >= MAX_PERSONAL_FIELDS) {
+    announce("Eight personal fields are already active. Remove one before placing another.", true);
+    fieldSelect.focus();
+    return;
+  }
+  const fieldId = nextFieldId();
+  const action = {
+    type: "place_field",
+    field_id: fieldId,
+    contributor_id: Number(fieldContributor.value),
+    x: Number(fieldX.value),
+    y: Number(fieldY.value),
+    polarity: fieldPolarity.value,
+    lifetime: fieldLifetime.value === "persistent"
+      ? { mode: "persistent" }
+      : { mode: "expiring", steps: Number(fieldLifetime.value) },
+  };
+  const receipt = dispatch(
+    action,
+    interactionTrace(
+      event,
+      `field.place(${fieldId + 1})`,
+      "Field scope; app-local synthetic contributors combine by additive superposition"
+    )
+  );
+  if (receipt?.accepted) {
+    fieldSelect.value = String(fieldId);
+    updateFieldControls();
+  }
+}
+
+function moveSelectedField(event) {
+  const fieldId = selectedFieldId();
+  if (fieldId === null) {
+    announce("Choose an active field before moving it.", true);
+    fieldSelect.focus();
+    return;
+  }
+  dispatch(
+    { type: "move_field", field_id: fieldId, x: Number(fieldX.value), y: Number(fieldY.value) },
+    interactionTrace(
+      event,
+      `field.move(${fieldId + 1})`,
+      "Field scope; contributor, polarity, lifetime, and additive policy remain unchanged"
+    )
+  );
+}
+
+function setSelectedFieldPolarity(event) {
+  const fieldId = selectedFieldId();
+  if (fieldId === null) {
+    announce("Choose an active field before changing its polarity.", true);
+    fieldSelect.focus();
+    return;
+  }
+  dispatch(
+    { type: "set_field_polarity", field_id: fieldId, polarity: fieldPolarity.value },
+    interactionTrace(
+      event,
+      `field.polarity(${fieldPolarity.value})`,
+      "Field scope; polarity changes without changing provenance, lifetime, or superposition policy"
+    )
+  );
+}
+
+function removeSelectedField(event) {
+  const fieldId = selectedFieldId();
+  if (fieldId === null) {
+    announce("Choose an active field before removing it.", true);
+    fieldSelect.focus();
+    return;
+  }
+  dispatch(
+    { type: "remove_field", field_id: fieldId },
+    interactionTrace(
+      event,
+      `field.remove(${fieldId + 1})`,
+      "Field scope; remove one additive contribution without changing other contributors"
+    )
+  );
+}
+
+function nextFieldId() {
+  const used = new Set(state.fields.map((field) => field.field_id));
+  for (let fieldId = 0; fieldId <= 63; fieldId += 1) {
+    if (!used.has(fieldId)) {
+      return fieldId;
+    }
+  }
+  return 0;
+}
+
+function selectedFieldId() {
+  if (fieldSelect.value === "") {
+    return null;
+  }
+  const fieldId = Number(fieldSelect.value);
+  return state.fields.some((field) => field.field_id === fieldId) ? fieldId : null;
+}
+
+function updateFieldOutputs() {
+  document.querySelector("#field-x-value").textContent = Number(fieldX.value).toFixed(2);
+  document.querySelector("#field-y-value").textContent = Number(fieldY.value).toFixed(2);
+}
+
+function syncSelectedFieldEditor() {
+  const fieldId = selectedFieldId();
+  const field = state.fields.find((candidate) => candidate.field_id === fieldId);
+  if (!field) {
+    return;
+  }
+  fieldContributor.value = String(field.contributor_id);
+  fieldPolarity.value = field.polarity;
+  fieldX.value = String(field.x);
+  fieldY.value = String(field.y);
+  updateFieldOutputs();
 }
 
 function saveCheckpoint(event) {
@@ -455,8 +593,12 @@ function renderSessionHistory() {
 function semanticActionLabel(action) {
   const parameters = Object.entries(action)
     .filter(([key]) => key !== "type" && key !== "expected_selection_revision")
-    .map(([key, value]) => `${key}=${value}`);
+    .map(([key, value]) => `${key}=${parameterLabel(value)}`);
   return parameters.length > 0 ? `${action.type}(${parameters.join(", ")})` : action.type;
+}
+
+function parameterLabel(value) {
+  return value && typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
 function refreshAll() {
@@ -520,6 +662,8 @@ function updateDomState(updateControls = true) {
   document.querySelector("#state-speed").textContent = state.average_speed.toFixed(3);
   document.querySelector("#state-behaviors").textContent = behaviorMixLabel();
   document.querySelector("#state-relations").textContent = String(relationTotal);
+  document.querySelector("#state-field-count").textContent = `${state.fields.length} of ${MAX_PERSONAL_FIELDS}`;
+  document.querySelector("#state-contributor-count").textContent = `${state.active_contributor_count} of ${CONTRIBUTOR_LABELS.length}`;
   document.querySelector("#state-replay-events").textContent =
     `${state.replay_event_count} events / ${state.replay_step_count} steps`;
   document.querySelector("#state-checkpoint-count").textContent = `${savedCheckpoints.size} of ${MAX_CHECKPOINTS}`;
@@ -529,13 +673,15 @@ function updateDomState(updateControls = true) {
   document.querySelector("#metric-speed").textContent = state.average_speed.toFixed(3);
   document.querySelector("#metric-subgroup").textContent = String(state.subgroup_members.length);
   document.querySelector("#metric-relations").textContent = String(relationTotal);
+  document.querySelector("#metric-fields").textContent = String(state.fields.length);
   document.querySelector("#step-button").disabled = state.running;
   document.querySelector("#start-button").disabled = state.running;
   document.querySelector("#pause-button").disabled = !state.running;
   updateHistoryControls();
+  updateFieldControls();
   canvas.setAttribute(
     "aria-label",
-    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}.`
+    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. ${state.fields.length} additive personal fields.`
   );
   updateMotionMode();
 
@@ -546,6 +692,55 @@ function updateDomState(updateControls = true) {
     }
     seedInput.value = state.seed;
   }
+}
+
+function updateFieldControls() {
+  const selectedValue = fieldSelect.value;
+  const fragment = document.createDocumentFragment();
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = state.fields.length === 0 ? "No active fields" : "Choose an active field";
+  fragment.append(empty);
+  state.fields.forEach((field) => {
+    const option = document.createElement("option");
+    option.value = String(field.field_id);
+    const lifetime = field.remaining_steps === null
+      ? "persistent"
+      : `${field.remaining_steps} steps left`;
+    option.textContent = `Field ${field.field_id + 1} · Contributor ${CONTRIBUTOR_LABELS[field.contributor_id]} · ${field.polarity} · ${lifetime}`;
+    fragment.append(option);
+  });
+  fieldSelect.replaceChildren(fragment);
+  fieldSelect.value = state.fields.some((field) => String(field.field_id) === selectedValue)
+    ? selectedValue
+    : "";
+  const hasSelection = selectedFieldId() !== null;
+  document.querySelector("#move-field-button").disabled = !hasSelection;
+  document.querySelector("#polarity-field-button").disabled = !hasSelection;
+  document.querySelector("#remove-field-button").disabled = !hasSelection;
+  document.querySelector("#place-field-button").disabled = state.fields.length >= MAX_PERSONAL_FIELDS;
+  renderFieldStateList();
+  updateFieldOutputs();
+}
+
+function renderFieldStateList() {
+  const list = document.querySelector("#field-state-list");
+  if (state.fields.length === 0) {
+    const empty = document.createElement("li");
+    empty.textContent = "No active personal fields.";
+    list.replaceChildren(empty);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  state.fields.forEach((field) => {
+    const item = document.createElement("li");
+    const lifetime = field.remaining_steps === null
+      ? "persistent until removal or reset"
+      : `expires in ${field.remaining_steps} fixed steps`;
+    item.textContent = `Field ${field.field_id + 1}: synthetic contributor ${CONTRIBUTOR_LABELS[field.contributor_id]}, ${field.polarity}, position ${field.x.toFixed(2)}, ${field.y.toFixed(2)}, ${lifetime}.`;
+    fragment.append(item);
+  });
+  list.replaceChildren(fragment);
 }
 
 function renderCheckpointOptions(selectedName = checkpointSelect.value) {
@@ -680,6 +875,7 @@ function draw() {
   context.fillStyle = "#fbf8f2";
   context.fillRect(0, 0, width, height);
   drawFieldLines(width, height);
+  drawPersonalFields(width, height);
   const projectedRows = [];
   forEachRow((row) => projectedRows.push(row));
   const wholeSwarmTargeted = projectedRows.every((row) => row[9] > 0.5);
@@ -693,6 +889,32 @@ function draw() {
   }
   drawRelations(projectedRows, width, height);
   projectedRows.forEach((row) => drawMember(row, width, height, !wholeSwarmTargeted));
+}
+
+function drawPersonalFields(width, height) {
+  state.fields.forEach((field) => {
+    const x = ((field.x + 1) / 2) * width;
+    const y = ((1 - field.y) / 2) * height;
+    const color = CONTRIBUTOR_COLORS[field.contributor_id] || "#463b69";
+    context.save();
+    context.translate(x, y);
+    context.strokeStyle = color;
+    context.fillStyle = `${color}22`;
+    context.lineWidth = 4;
+    context.setLineDash(field.remaining_steps === null ? [] : [7, 5]);
+    context.beginPath();
+    context.arc(0, 0, 27, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+    context.setLineDash([]);
+    context.fillStyle = color;
+    context.font = "700 18px Aptos, Candara, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    const polarity = field.polarity === "attract" ? "+" : "−";
+    context.fillText(`${CONTRIBUTOR_LABELS[field.contributor_id]}${polarity}`, 0, 1);
+    context.restore();
+  });
 }
 
 function drawRelations(projectedRows, width, height) {

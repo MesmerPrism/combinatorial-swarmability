@@ -43,7 +43,8 @@
           <h2 id="atlas-title">Atlas entries</h2>
           <p>
             Filter the public catalogue, then inspect what a source reports and what
-            this atlas reconstructs. The scope and deterministic-history entries are interactive in this slice.
+            this atlas reconstructs. Scope and deterministic history are bound;
+            additive personal-field controls are available while their atlas card remains planned.
           </p>
         </div>
 
@@ -153,11 +154,12 @@
 
       <section id="demonstration" class="demo shell" aria-labelledby="demo-title">
         <div class="section-heading">
-          <h2 id="demo-title">Interactive reconstruction: scope and granularity</h2>
+          <h2 id="demo-title">Interactive reconstruction: scope, fields, and history</h2>
           <p>
             Start intentionally, choose one member, the subgroup, or the whole swarm,
             then issue the same collective request through accessible browser controls.
-            Save, retrieve, reset, and replay operate across the same deterministic core.
+            Place additive personal fields with explicit polarity and lifetime. Save,
+            retrieve, reset, and replay operate across the same deterministic core.
           </p>
         </div>
 
@@ -174,8 +176,9 @@
               <p id="canvas-description" class="sr-only">
                 A two-dimensional synthetic swarm, initially paused. Lines show local
                 neighbour relations, while member shape indicates flock, cohere, or
-                disperse. Select members with the controls below or point at a member
-                on the canvas. Equivalent state also appears as text.
+                disperse. Labelled circles show synthetic contributor fields and
+                attract or repel polarity. Select members with the controls below or
+                point at a member on the canvas. Equivalent state also appears as text.
               </p>
               <div class="canvas-key" aria-hidden="true">
                 <span><i class="mark mark-primary"></i> Primary</span>
@@ -184,6 +187,8 @@
                 <span><i class="mark mark-flock"></i> Flock</span>
                 <span><i class="mark mark-cohere"></i> Cohere</span>
                 <span><i class="mark mark-disperse"></i> Disperse</span>
+                <span><i class="mark mark-field-attract"></i> Attract field</span>
+                <span><i class="mark mark-field-repel"></i> Repel field</span>
               </div>
             </div>
 
@@ -200,6 +205,8 @@
                 <div><dt>Update mode</dt><dd id="state-motion-mode">Standard</dd></div>
                 <div><dt>Collective rules</dt><dd id="state-behaviors">24 flock</dd></div>
                 <div><dt>Neighbour links</dt><dd id="state-relations">0</dd></div>
+                <div><dt>Personal fields</dt><dd id="state-field-count">0 of 8</dd></div>
+                <div><dt>Synthetic contributors</dt><dd id="state-contributor-count">0 of 4</dd></div>
                 <div><dt>Replay tape</dt><dd id="state-replay-events">0 events / 0 steps</dd></div>
                 <div><dt>Saved checkpoints</dt><dd id="state-checkpoint-count">0 of 5</dd></div>
               </dl>
@@ -216,11 +223,19 @@
                   <div><dt>Average speed</dt><dd id="metric-speed">0.360</dd></div>
                   <div><dt>Subgroup members</dt><dd id="metric-subgroup">6</dd></div>
                   <div><dt>Visible relations</dt><dd id="metric-relations">0</dd></div>
+                  <div><dt>Active fields</dt><dd id="metric-fields">0</dd></div>
                 </dl>
                 <p class="metric-note">
                   Cohesion and polarization are unitless 0–1 summaries; spacing uses
                   normalized scene units. Metrics are descriptive, not participant outcomes.
                 </p>
+                <h4>Active field state</h4>
+                <p class="metric-note">
+                  Contributor labels are synthetic app-local provenance, not people, accounts, or durable identity.
+                </p>
+                <ul id="field-state-list" class="field-state-list">
+                  <li>No active personal fields.</li>
+                </ul>
               </section>
 
               <section class="action-trace" aria-labelledby="action-trace-title">
@@ -289,6 +304,48 @@
                 <button id="faster-button" type="button">Faster</button>
               </div>
               <p class="shortcut-note">Keyboard shortcuts: minus for Slower, plus for Faster.</p>
+            </fieldset>
+
+            <fieldset>
+              <legend>Additive personal fields</legend>
+              <p class="control-help">
+                Sliders are the accessible synthetic route. Each placed source becomes an app-local semantic field action;
+                active sources combine by order-independent superposition in the deterministic core.
+              </p>
+              <div class="field-grid">
+                <label for="field-contributor">Synthetic contributor</label>
+                <select id="field-contributor" name="field-contributor">
+                  <option value="0">Contributor A</option>
+                  <option value="1">Contributor B</option>
+                  <option value="2">Contributor C</option>
+                  <option value="3">Contributor D</option>
+                </select>
+                <label for="field-polarity">Polarity</label>
+                <select id="field-polarity" name="field-polarity">
+                  <option value="attract">Attract</option>
+                  <option value="repel">Repel</option>
+                </select>
+                <label for="field-lifetime">Lifetime</label>
+                <select id="field-lifetime" name="field-lifetime">
+                  <option value="persistent">Persistent until removal/reset</option>
+                  <option value="120">Expire after 120 fixed steps</option>
+                  <option value="300">Expire after 300 fixed steps</option>
+                </select>
+              </div>
+              <label for="field-x">Horizontal position <output id="field-x-value" for="field-x">0.40</output></label>
+              <input id="field-x" name="field-x" type="range" min="-0.9" max="0.9" step="0.05" value="0.4">
+              <label for="field-y">Vertical position <output id="field-y-value" for="field-y">0.00</output></label>
+              <input id="field-y" name="field-y" type="range" min="-0.9" max="0.9" step="0.05" value="0">
+              <button id="place-field-button" type="button">Place personal field</button>
+              <label class="input-label" for="field-select">Active field</label>
+              <select id="field-select" name="field-select">
+                <option value="">No active fields</option>
+              </select>
+              <div class="button-row field-buttons">
+                <button id="move-field-button" type="button" disabled>Move selected</button>
+                <button id="polarity-field-button" type="button" disabled>Set selected polarity</button>
+                <button id="remove-field-button" type="button" disabled>Remove selected</button>
+              </div>
             </fieldset>
 
             <fieldset>
@@ -376,6 +433,6 @@
     <noscript>
       <p class="noscript-note">JavaScript and WebAssembly are required for the interactive reconstruction.</p>
     </noscript>
-    <script type="module" src="./app.js?v=history-v1"></script>
+    <script type="module" src="./app.js?v=fields-v1"></script>
   </body>
 </html>

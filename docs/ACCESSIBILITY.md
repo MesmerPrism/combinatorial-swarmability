@@ -12,6 +12,9 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Flock, Cohere, and Disperse buttons assign collective steering without a
   timed gesture or continuous pointer movement.
 - Scope controls are ordinary radio inputs and remain usable while paused.
+- Native range inputs, selects, and buttons provide a synthetic equivalent for
+  placing, moving, changing polarity, and removing personal fields without
+  device motion or gesture hardware.
 - The member grid exposes primary and subgroup selection without requiring
   precise canvas pointing.
 - Catalogue facets are labelled native selects with one clear-filter action.
@@ -36,6 +39,9 @@ The canvas is a visual projection, not the sole interface or state authority.
   complete non-canvas representations.
 - Replay event/step counts, saved-checkpoint count, and the latest 50 semantic
   or history operations remain visible as structured text.
+- Every active field exposes its synthetic contributor label, normalized
+  position, polarity, and remaining or persistent lifetime as structured text;
+  field identity never depends on canvas color.
 - The canvas has a concise text description and is never focus-required.
 - Focus indicators are explicit; forced-colors and 200% zoom layouts are
   supported.
@@ -51,5 +57,6 @@ The canvas is a visual projection, not the sole interface or state authority.
 ## Browser verification
 
 Desktop and mobile checks cover keyboard selection/action, pointer selection,
-scope-aware collective rules, focus visibility, reduced-motion state,
-intentional start, pause, single-step, reset, and horizontal overflow.
+scope-aware collective rules, field placement/motion/polarity/lifetime,
+focus visibility, reduced-motion state, intentional start, pause, single-step,
+reset/replay, and horizontal overflow.

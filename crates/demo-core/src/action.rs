@@ -24,6 +24,48 @@ pub enum CollectiveBehavior {
     Disperse,
 }
 
+/// Direction of one app-local synthetic personal field.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FieldPolarity {
+    /// Bend member trajectories toward the field source.
+    Attract,
+    /// Bend member trajectories away from the field source.
+    Repel,
+}
+
+/// Explicit lifetime requested when placing a personal field.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum FieldLifetime {
+    /// Remain active until removed or the scene is reset.
+    Persistent,
+    /// Expire after the requested number of fixed simulation steps.
+    Expiring {
+        /// Positive bounded fixed-step lifetime.
+        steps: u32,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+enum FieldLifetimeWire {
+    Persistent {},
+    Expiring { steps: u32 },
+}
+
+impl<'de> Deserialize<'de> for FieldLifetime {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(match FieldLifetimeWire::deserialize(deserializer)? {
+            FieldLifetimeWire::Persistent {} => Self::Persistent,
+            FieldLifetimeWire::Expiring { steps } => Self::Expiring { steps },
+        })
+    }
+}
+
 /// Input-modality-free action accepted by the app-local reducer.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -58,6 +100,42 @@ pub enum SemanticAction {
         behavior: CollectiveBehavior,
         /// Selection revision against which the action was prepared.
         expected_selection_revision: u64,
+    },
+    /// Place one bounded field with synthetic contributor provenance.
+    PlaceField {
+        /// Stable field identifier within the scene.
+        field_id: u16,
+        /// App-local synthetic contributor channel; never an account identity.
+        contributor_id: u8,
+        /// Horizontal position in normalized scene coordinates.
+        x: f32,
+        /// Vertical position in normalized scene coordinates.
+        y: f32,
+        /// Whether the field attracts or repels.
+        polarity: FieldPolarity,
+        /// Persistent or bounded expiring lifetime.
+        lifetime: FieldLifetime,
+    },
+    /// Move an existing field without changing its provenance, polarity, or lifetime.
+    MoveField {
+        /// Stable field identifier within the scene.
+        field_id: u16,
+        /// New horizontal position in normalized scene coordinates.
+        x: f32,
+        /// New vertical position in normalized scene coordinates.
+        y: f32,
+    },
+    /// Change one existing field's polarity.
+    SetFieldPolarity {
+        /// Stable field identifier within the scene.
+        field_id: u16,
+        /// New attract or repel direction.
+        polarity: FieldPolarity,
+    },
+    /// Remove one existing field explicitly.
+    RemoveField {
+        /// Stable field identifier within the scene.
+        field_id: u16,
     },
     /// Begin fixed-step motion.
     Start,
@@ -95,6 +173,26 @@ enum SemanticActionWire {
         behavior: CollectiveBehavior,
         expected_selection_revision: u64,
     },
+    PlaceField {
+        field_id: u16,
+        contributor_id: u8,
+        x: f32,
+        y: f32,
+        polarity: FieldPolarity,
+        lifetime: FieldLifetime,
+    },
+    MoveField {
+        field_id: u16,
+        x: f32,
+        y: f32,
+    },
+    SetFieldPolarity {
+        field_id: u16,
+        polarity: FieldPolarity,
+    },
+    RemoveField {
+        field_id: u16,
+    },
     Start {},
     Pause {},
     Step {},
@@ -130,6 +228,26 @@ impl<'de> Deserialize<'de> for SemanticAction {
                 behavior,
                 expected_selection_revision,
             },
+            SemanticActionWire::PlaceField {
+                field_id,
+                contributor_id,
+                x,
+                y,
+                polarity,
+                lifetime,
+            } => Self::PlaceField {
+                field_id,
+                contributor_id,
+                x,
+                y,
+                polarity,
+                lifetime,
+            },
+            SemanticActionWire::MoveField { field_id, x, y } => Self::MoveField { field_id, x, y },
+            SemanticActionWire::SetFieldPolarity { field_id, polarity } => {
+                Self::SetFieldPolarity { field_id, polarity }
+            }
+            SemanticActionWire::RemoveField { field_id } => Self::RemoveField { field_id },
             SemanticActionWire::Start {} => Self::Start,
             SemanticActionWire::Pause {} => Self::Pause,
             SemanticActionWire::Step {} => Self::Step,
@@ -155,6 +273,14 @@ pub enum ActionCode {
     SpeedAdjusted,
     /// Collective steering rule changed for all resolved targets.
     BehaviorSet,
+    /// A bounded personal field was placed.
+    FieldPlaced,
+    /// An existing personal field was moved.
+    FieldMoved,
+    /// An existing personal field changed polarity.
+    FieldPolaritySet,
+    /// An existing personal field was removed.
+    FieldRemoved,
     /// Motion started.
     Started,
     /// Motion paused.
@@ -173,6 +299,20 @@ pub enum ActionCode {
     StaleSelection,
     /// The speed delta was non-finite, zero, or outside the accepted bound.
     InvalidSpeedDelta,
+    /// The requested field identifier is outside the bounded scene contract.
+    InvalidFieldId,
+    /// A field already uses the requested identifier.
+    DuplicateField,
+    /// The requested field does not exist.
+    MissingField,
+    /// The synthetic contributor channel is outside the app-local bound.
+    InvalidContributor,
+    /// A field position was non-finite or outside the normalized scene.
+    InvalidFieldPosition,
+    /// An expiring field requested a zero, excessive, or overflowing lifetime.
+    InvalidFieldLifetime,
+    /// The bounded scene already contains its maximum number of fields.
+    FieldLimitReached,
     /// Single-step was requested while the simulation was running.
     StepRequiresPause,
 }
@@ -222,6 +362,25 @@ pub struct BehaviorCounts {
     pub disperse: usize,
 }
 
+/// Concise personal-field state for the semantic DOM surface.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct FieldSummary {
+    /// Stable scene-local field identifier.
+    pub field_id: u16,
+    /// App-local synthetic contributor channel.
+    pub contributor_id: u8,
+    /// Horizontal normalized scene position.
+    pub x: f32,
+    /// Vertical normalized scene position.
+    pub y: f32,
+    /// Current attract or repel direction.
+    pub polarity: FieldPolarity,
+    /// Absolute fixed-step expiry, or `None` for persistent fields.
+    pub expires_at_tick: Option<u64>,
+    /// Fixed steps remaining at the current tick, or `None` for persistent fields.
+    pub remaining_steps: Option<u64>,
+}
+
 /// Public state projected outside the high-rate canvas.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PublicState {
@@ -243,6 +402,10 @@ pub struct PublicState {
     pub average_speed: f32,
     /// Current distribution of collective steering rules.
     pub behavior_counts: BehaviorCounts,
+    /// Active additive personal fields in stable identifier order.
+    pub fields: Vec<FieldSummary>,
+    /// Number of app-local synthetic contributor channels currently represented.
+    pub active_contributor_count: usize,
     /// Monotonic application-state revision.
     pub state_revision: u64,
     /// Monotonic selection-only revision.

@@ -1,8 +1,8 @@
 //! Integration coverage for the deterministic core and Matter handoff.
 
 use combinatorial_swarmability_demo_core::{
-    ActionCode, CollectiveBehavior, DemoCore, SemanticAction, TargetScope, FRAME_ROW_WIDTH,
-    MEMBER_COUNT,
+    ActionCode, CollectiveBehavior, DemoCore, FieldLifetime, FieldPolarity, SemanticAction,
+    TargetScope, FRAME_ROW_WIDTH, MAX_FIELD_LIFETIME_STEPS, MAX_PERSONAL_FIELDS, MEMBER_COUNT,
 };
 use sha2::{Digest, Sha256};
 
@@ -17,6 +17,24 @@ fn set_behavior(behavior: CollectiveBehavior, revision: u64) -> SemanticAction {
     SemanticAction::SetBehavior {
         behavior,
         expected_selection_revision: revision,
+    }
+}
+
+fn place_field(
+    field_id: u16,
+    contributor_id: u8,
+    x: f32,
+    y: f32,
+    polarity: FieldPolarity,
+    lifetime: FieldLifetime,
+) -> SemanticAction {
+    SemanticAction::PlaceField {
+        field_id,
+        contributor_id,
+        x,
+        y,
+        polarity,
+        lifetime,
     }
 }
 
@@ -301,6 +319,268 @@ fn deterministic_replay_rejects_damage_and_unbound_snapshots() {
 }
 
 #[test]
+fn additive_personal_fields_are_order_independent_and_same_seed_comparable() {
+    let field_two = place_field(
+        2,
+        0,
+        0.72,
+        0.18,
+        FieldPolarity::Attract,
+        FieldLifetime::Persistent,
+    );
+    let field_nine = place_field(
+        9,
+        1,
+        -0.62,
+        -0.24,
+        FieldPolarity::Repel,
+        FieldLifetime::Persistent,
+    );
+
+    let mut first = DemoCore::new(707);
+    assert!(first.dispatch(field_nine.clone()).accepted);
+    assert!(first.dispatch(field_two.clone()).accepted);
+    let _ = first.dispatch(SemanticAction::Start);
+    for _ in 0..20 {
+        assert_eq!(first.advance_elapsed(128), 8);
+    }
+    let _ = first.dispatch(SemanticAction::Pause);
+
+    let mut reverse = DemoCore::new(707);
+    assert!(reverse.dispatch(field_two).accepted);
+    assert!(reverse.dispatch(field_nine).accepted);
+    let _ = reverse.dispatch(SemanticAction::Start);
+    for _ in 0..20 {
+        assert_eq!(reverse.advance_elapsed(128), 8);
+    }
+    let _ = reverse.dispatch(SemanticAction::Pause);
+
+    assert_eq!(
+        first.snapshot_json().expect("snapshot serializes"),
+        reverse.snapshot_json().expect("snapshot serializes")
+    );
+    assert_eq!(first.public_state().fields.len(), 2);
+    assert_eq!(first.public_state().active_contributor_count, 2);
+
+    let mut baseline = DemoCore::new(707);
+    let _ = baseline.dispatch(SemanticAction::Start);
+    for _ in 0..20 {
+        let _ = baseline.advance_elapsed(128);
+    }
+    let _ = baseline.dispatch(SemanticAction::Pause);
+    let field_centroid = centroid_x(&first.frame_rows().expect("field rows project"));
+    let baseline_centroid = centroid_x(&baseline.frame_rows().expect("baseline rows project"));
+    assert!((field_centroid - baseline_centroid).abs() > 0.02);
+
+    let tape = first.replay_json().expect("field replay serializes");
+    let replayed = DemoCore::from_replay_json(&tape).expect("field replay reconstructs");
+    assert_eq!(
+        first.snapshot_json().expect("snapshot serializes"),
+        replayed.snapshot_json().expect("snapshot serializes")
+    );
+}
+
+#[test]
+fn field_expiry_removal_replay_and_reset_share_one_state_path() {
+    let mut core = DemoCore::new(808);
+    assert!(
+        core.dispatch(place_field(
+            0,
+            0,
+            0.4,
+            0.0,
+            FieldPolarity::Attract,
+            FieldLifetime::Persistent,
+        ))
+        .accepted
+    );
+    assert_eq!(
+        core.dispatch(SemanticAction::MoveField {
+            field_id: 0,
+            x: 0.55,
+            y: 0.1,
+        })
+        .code,
+        ActionCode::FieldMoved
+    );
+    assert_eq!(
+        core.dispatch(SemanticAction::SetFieldPolarity {
+            field_id: 0,
+            polarity: FieldPolarity::Repel,
+        })
+        .code,
+        ActionCode::FieldPolaritySet
+    );
+    assert!(
+        core.dispatch(place_field(
+            1,
+            1,
+            -0.4,
+            0.0,
+            FieldPolarity::Repel,
+            FieldLifetime::Expiring { steps: 2 },
+        ))
+        .accepted
+    );
+    assert_eq!(core.public_state().fields[1].remaining_steps, Some(2));
+    let _ = core.dispatch(SemanticAction::Step);
+    assert_eq!(core.public_state().fields[1].remaining_steps, Some(1));
+    let _ = core.dispatch(SemanticAction::Step);
+    assert_eq!(core.public_state().fields.len(), 1);
+
+    let removed = core.dispatch(SemanticAction::RemoveField { field_id: 0 });
+    assert_eq!(removed.code, ActionCode::FieldRemoved);
+    assert!(core.public_state().fields.is_empty());
+    assert!(
+        core.dispatch(place_field(
+            3,
+            2,
+            0.0,
+            0.5,
+            FieldPolarity::Attract,
+            FieldLifetime::Persistent,
+        ))
+        .accepted
+    );
+    let _ = core.dispatch(SemanticAction::Reset);
+    assert!(core.public_state().fields.is_empty());
+    assert_eq!(core.public_state().tick, 0);
+
+    let tape = core.replay_json().expect("field lifecycle serializes");
+    let replayed = DemoCore::from_replay_json(&tape).expect("field lifecycle replays");
+    assert_eq!(
+        core.snapshot_json().expect("snapshot serializes"),
+        replayed.snapshot_json().expect("snapshot serializes")
+    );
+}
+
+#[test]
+fn invalid_personal_field_inputs_fail_closed() {
+    let mut core = DemoCore::new(909);
+    assert_eq!(
+        core.dispatch(place_field(
+            64,
+            0,
+            0.0,
+            0.0,
+            FieldPolarity::Attract,
+            FieldLifetime::Persistent,
+        ))
+        .code,
+        ActionCode::InvalidFieldId
+    );
+    assert_eq!(
+        core.dispatch(place_field(
+            0,
+            4,
+            0.0,
+            0.0,
+            FieldPolarity::Attract,
+            FieldLifetime::Persistent,
+        ))
+        .code,
+        ActionCode::InvalidContributor
+    );
+    assert_eq!(
+        core.dispatch(place_field(
+            0,
+            0,
+            f32::NAN,
+            0.0,
+            FieldPolarity::Attract,
+            FieldLifetime::Persistent,
+        ))
+        .code,
+        ActionCode::InvalidFieldPosition
+    );
+    assert_eq!(
+        core.dispatch(place_field(
+            0,
+            0,
+            0.0,
+            0.0,
+            FieldPolarity::Attract,
+            FieldLifetime::Expiring { steps: 0 },
+        ))
+        .code,
+        ActionCode::InvalidFieldLifetime
+    );
+    assert_eq!(
+        core.dispatch(place_field(
+            0,
+            0,
+            0.0,
+            0.0,
+            FieldPolarity::Attract,
+            FieldLifetime::Expiring {
+                steps: MAX_FIELD_LIFETIME_STEPS + 1,
+            },
+        ))
+        .code,
+        ActionCode::InvalidFieldLifetime
+    );
+
+    assert_eq!(
+        core.dispatch(SemanticAction::MoveField {
+            field_id: 99,
+            x: 0.0,
+            y: 0.0,
+        })
+        .code,
+        ActionCode::MissingField
+    );
+}
+
+#[test]
+fn personal_field_count_and_damaged_actions_fail_closed() {
+    let mut core = DemoCore::new(910);
+    for field_id in 0..MAX_PERSONAL_FIELDS {
+        assert!(
+            core.dispatch(place_field(
+                u16::try_from(field_id).expect("field ID fits"),
+                u8::try_from(field_id % 4).expect("contributor fits"),
+                0.0,
+                0.0,
+                FieldPolarity::Attract,
+                FieldLifetime::Persistent,
+            ))
+            .accepted
+        );
+    }
+    assert_eq!(
+        core.dispatch(place_field(
+            8,
+            0,
+            0.0,
+            0.0,
+            FieldPolarity::Attract,
+            FieldLifetime::Persistent,
+        ))
+        .code,
+        ActionCode::FieldLimitReached
+    );
+
+    let damaged_action = r#"{
+        "type":"place_field",
+        "field_id":1,
+        "contributor_id":0,
+        "x":0.0,
+        "y":0.0,
+        "polarity":"attract",
+        "lifetime":{"mode":"persistent","private_identity":"reject"}
+    }"#;
+    assert!(serde_json::from_str::<SemanticAction>(damaged_action).is_err());
+    let damaged_replay = format!(
+        r#"{{
+            "schema":"combinatorial.swarmability.replay.v1",
+            "initial_seed":910,
+            "events":[{{"kind":"action","action":{damaged_action}}}]
+        }}"#
+    );
+    assert!(DemoCore::from_replay_json(&damaged_replay).is_err());
+}
+
+#[test]
 fn matter_payload_and_frame_rows_preserve_scene_identity() {
     let core = DemoCore::new(5);
     let payload = core.render_payload().expect("Matter payload validates");
@@ -340,4 +620,11 @@ fn mean_pair_distance(rows: &[f32]) -> f32 {
         }
     }
     total / f32::from(pairs)
+}
+
+fn centroid_x(rows: &[f32]) -> f32 {
+    rows.chunks_exact(FRAME_ROW_WIDTH)
+        .map(|row| row[1])
+        .sum::<f32>()
+        / 24.0
 }

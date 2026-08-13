@@ -12,11 +12,15 @@ composition or activation decision exists.
 ## Scope
 
 The atlas shell exposes seven allowlisted interaction mappings and their exact
-evidence and transfer boundaries. The implemented entry demonstrates
+evidence and transfer boundaries. Implemented mechanisms demonstrate
 target-independent collective steering and speed actions over three scopes:
 one selected member, a selected subgroup, or the whole swarm. `Flock`
 maintains local alignment and spacing, `Cohere` steers toward peers sharing
 that rule, and `Disperse` steers away from matching peers or the swarm centre.
+Additive personal fields separately demonstrate app-local synthetic
+contributor provenance, attract/repel polarity, persistent/expiring lifetime,
+and order-independent superposition. Synthetic contributors are not accounts,
+people, durable identity, or live multi-user authority.
 
 ## Non-scope
 
@@ -50,6 +54,7 @@ SemanticAction (route-free intent)
         |
         v
 scope and authority policy -- selection revision / resolved targets
+field combination policy -- bounded additive superposition / expiry
         |
         v
 fixed-step deterministic flock state
@@ -68,6 +73,12 @@ Canvas2D
 keeps selection revision separate from state revision so actions built against
 stale target selections fail closed. The browser never sends input-modality
 names into the reducer.
+
+Personal-field actions are likewise route-free: place, move, set polarity, and
+remove. The reducer validates field ID, synthetic contributor channel,
+normalized position, lifetime, and the eight-field bound. Active fields remain
+sorted by stable ID before acceleration is summed, so placement order does not
+change the outcome. Fixed-step expiry, reset, and replay use the same core path.
 
 The core also owns a strict `combinatorial.swarmability.replay.v1` tape. It
 records accepted semantic actions plus the fixed-step counts actually executed
@@ -100,7 +111,8 @@ current scope, target count, selected members, collective-rule distribution,
 visible neighbour-link count, tick, seed, run state, and most recent action.
 It also shows the latest input route, normalized input, semantic action, policy
 resolution, core receipt, cohesion, polarization, nearest spacing, speed, and
-subgroup membership. Replay event/step totals, checkpoint count, and the
+subgroup membership. Active field count, contributor count, position,
+polarity, and lifetime also have non-canvas projections. Replay event/step totals, checkpoint count, and the
 bounded session operation log also have semantic DOM projections. Animation
 frames do not enter the live region or operation log.
 
@@ -110,7 +122,9 @@ The validation boundary covers the public catalogue schema, filter facets,
 source links, evidence labels, transfer boundaries, deterministic state hashes, serde round trips,
 all three scopes, convergent cohere and divergent disperse structure,
 invalid/empty/stale selection, pause/step/reset/restart, strict replay round
-trips and damaged replay rejection,
+trips and damaged replay rejection, additive-field order independence,
+bounded/damaged fields, expiry/removal, same-seed metrics, and cross-mechanism
+reset/replay,
 Matter payload conversion, exact Git dependency pins, frozen builds, the Wasm
 bundle, public-boundary scans, and browser interaction/accessibility checks.
 
@@ -134,9 +148,11 @@ actions and payloads, not DOM or Canvas code.
 | Moving dots imply collectivity without showing it | Deterministic neighbour rules, relational lines, distinct rule shapes, and pair-distance tests |
 | Browser history becomes a second simulation | Checkpoints contain versioned core replay tapes and reconstruct through the same reducer |
 | A loaded snapshot gains false provenance | Snapshot restoration disables replay export; only validated tapes remain replayable |
+| Synthetic provenance becomes identity or authority | Four app-local labels are ephemeral reducer values with no account, storage, or network contract |
+| Field combination depends on action arrival order | Fields are bounded and sorted by stable ID before additive acceleration is summed |
 
 ## Next slice
 
-Bind the accepted historical-versioning catalogue entry to this shared history
-mechanism, then continue with additive personal fields. Optics integration,
+Bind the additive personal-field catalogue entry to this shared mechanism,
+then continue with raw dynamics parameters. Optics integration,
 multi-user authority, and Quest adaptation remain separate later decisions.

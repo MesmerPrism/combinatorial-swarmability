@@ -464,6 +464,16 @@ canvas {
   transform: rotate(45deg);
 }
 
+.mark-field-attract,
+.mark-field-repel {
+  border: 3px solid #3f6f85;
+  border-radius: 50%;
+}
+
+.mark-field-repel {
+  border-style: dashed;
+}
+
 .state-block,
 .controls {
   border: 1px solid var(--line);
@@ -632,6 +642,54 @@ canvas {
 
 .history-buttons button {
   flex: 1 1 8rem;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.8fr) minmax(0, 1.2fr);
+  gap: 0.45rem 0.7rem;
+  align-items: center;
+  margin-bottom: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.86rem;
+}
+
+.field-grid select,
+#field-select {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+}
+
+#field-x,
+#field-y {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+#place-field-button {
+  width: 100%;
+  margin: 0.35rem 0 0.8rem;
+}
+
+.field-buttons {
+  margin-top: 0.55rem;
+}
+
+.field-buttons button {
+  flex: 1 1 8rem;
+}
+
+.field-state-list {
+  margin: 0;
+  padding-left: 1.3rem;
+  font-family: var(--font-ui);
+  font-size: 0.84rem;
+}
+
+.field-state-list li + li {
+  margin-top: 0.35rem;
 }
 
 button,
@@ -911,6 +969,10 @@ a:focus-visible {
 
   .member-controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field-grid {
+    grid-template-columns: 1fr;
   }
 
   .button-row > button,

@@ -4,10 +4,12 @@ An accessible, deterministic public interaction atlas for examining how
 physical input routes become semantic requests, how scope and authority
 resolve those requests, and how one swarm core makes the result measurable.
 
-The first interactive entry is intentionally narrow. Pointer, keyboard, and
-low-rate button controls all dispatch the same app-owned semantic actions into
-a Rust core. Members continuously combine local alignment, cohesion, and
-separation with an assigned `flock`, `cohere`, or `disperse` rule. The core
+The first interactive mechanisms are intentionally bounded. Pointer, keyboard,
+sliders, and low-rate buttons dispatch app-owned semantic actions into a Rust
+core. Members continuously combine local alignment, cohesion, and separation
+with an assigned `flock`, `cohere`, or `disperse` rule. Up to eight app-local
+personal fields add attract or repel effects with explicit persistent or
+expiring lifetimes and synthetic contributor provenance. The core
 projects simulation state through Rusty Matter's
 renderer-neutral `ParticleRenderPayload`; a thin WebAssembly adapter exposes a
 bounded frame buffer to a Canvas2D renderer. The canvas is not the only

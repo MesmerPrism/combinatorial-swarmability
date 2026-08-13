@@ -6,8 +6,8 @@ use rusty_matter_particles::{ParticleRenderPayload, ParticleSet, ParticleState};
 use serde::{Deserialize, Serialize};
 
 use crate::action::{
-    ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, MemberSummary, PublicState,
-    SemanticAction, TargetScope,
+    ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, FieldLifetime, FieldPolarity,
+    FieldSummary, MemberSummary, PublicState, SemanticAction, TargetScope,
 };
 use crate::replay::{
     validate_replay_tape, ReplayEvent, ReplayRecorder, ReplayTape, MAX_REPLAY_JSON_BYTES,
@@ -18,6 +18,12 @@ use crate::rng::SplitMix64;
 pub const MEMBER_COUNT: usize = 24;
 /// Number of `f32` values in each Wasm frame row.
 pub const FRAME_ROW_WIDTH: usize = 11;
+/// Maximum number of additive personal fields retained by one scene.
+pub const MAX_PERSONAL_FIELDS: usize = 8;
+/// Maximum number of app-local synthetic contributor channels.
+pub const MAX_SYNTHETIC_CONTRIBUTORS: u8 = 4;
+/// Maximum expiring-field lifetime in fixed simulation steps.
+pub const MAX_FIELD_LIFETIME_STEPS: u32 = 1_200;
 
 const DEFAULT_SUBGROUP_COUNT: usize = 6;
 const MEMBER_COUNT_F32: f32 = 24.0;
@@ -33,6 +39,22 @@ const NEIGHBOR_RADIUS_SQUARED: f32 = 0.42 * 0.42;
 const SEPARATION_RADIUS_SQUARED: f32 = 0.13 * 0.13;
 const DISPERSE_RADIUS_SQUARED: f32 = 0.55 * 0.55;
 const SOFT_WORLD_LIMIT: f32 = 0.78;
+const FIELD_POSITION_LIMIT: f32 = 0.90;
+const MAX_FIELD_ID: u16 = 63;
+const FIELD_SOFTENING: f32 = 0.075;
+const FIELD_ACCELERATION_SCALE: f32 = 0.22;
+const MAX_FIELD_ACCELERATION_PER_SOURCE: f32 = 1.65;
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct FieldState {
+    field_id: u16,
+    contributor_id: u8,
+    x: f32,
+    y: f32,
+    polarity: FieldPolarity,
+    expires_at_tick: Option<u64>,
+}
 
 /// Error returned when a deterministic snapshot or Matter payload is invalid.
 #[derive(Debug)]
@@ -67,11 +89,13 @@ impl From<serde_json::Error> for DemoError {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 struct DemoSnapshot {
     seed: u64,
     particles: ParticleSet,
     speed_offsets: Vec<f32>,
     behaviors: Vec<CollectiveBehavior>,
+    fields: Vec<FieldState>,
     scope: TargetScope,
     primary_member: Option<u16>,
     subgroup_members: Vec<u16>,
@@ -193,6 +217,19 @@ impl DemoCore {
                 behavior,
                 expected_selection_revision,
             } => self.set_behavior(behavior, expected_selection_revision),
+            SemanticAction::PlaceField {
+                field_id,
+                contributor_id,
+                x,
+                y,
+                polarity,
+                lifetime,
+            } => self.place_field(field_id, contributor_id, x, y, polarity, lifetime),
+            SemanticAction::MoveField { field_id, x, y } => self.move_field(field_id, x, y),
+            SemanticAction::SetFieldPolarity { field_id, polarity } => {
+                self.set_field_polarity(field_id, polarity)
+            }
+            SemanticAction::RemoveField { field_id } => self.remove_field(field_id),
             SemanticAction::Start => self.start(),
             SemanticAction::Pause => self.pause(),
             SemanticAction::Step => self.step_action(),
@@ -241,6 +278,29 @@ impl DemoCore {
             .iter()
             .copied()
             .collect::<BTreeSet<_>>();
+        let active_contributor_count = self
+            .snapshot
+            .fields
+            .iter()
+            .map(|field| field.contributor_id)
+            .collect::<BTreeSet<_>>()
+            .len();
+        let fields = self
+            .snapshot
+            .fields
+            .iter()
+            .map(|field| FieldSummary {
+                field_id: field.field_id,
+                contributor_id: field.contributor_id,
+                x: round_for_public(field.x),
+                y: round_for_public(field.y),
+                polarity: field.polarity,
+                expires_at_tick: field.expires_at_tick,
+                remaining_steps: field
+                    .expires_at_tick
+                    .map(|expiry| expiry.saturating_sub(self.snapshot.tick)),
+            })
+            .collect();
         let mut speed_total = 0.0;
         let mut behavior_counts = BehaviorCounts {
             flock: 0,
@@ -283,6 +343,8 @@ impl DemoCore {
             target_members: targets,
             average_speed: round_for_public(speed_total / MEMBER_COUNT_F32),
             behavior_counts,
+            fields,
+            active_contributor_count,
             state_revision: self.snapshot.state_revision,
             selection_revision: self.snapshot.selection_revision,
             replay_event_count: self.replay.event_count(),
@@ -472,6 +534,154 @@ impl DemoCore {
         )
     }
 
+    fn place_field(
+        &mut self,
+        field_id: u16,
+        contributor_id: u8,
+        x: f32,
+        y: f32,
+        polarity: FieldPolarity,
+        lifetime: FieldLifetime,
+    ) -> ActionReceipt {
+        if field_id > MAX_FIELD_ID {
+            return self.rejected(
+                ActionCode::InvalidFieldId,
+                "Field identifiers must remain inside the bounded scene range.",
+            );
+        }
+        if contributor_id >= MAX_SYNTHETIC_CONTRIBUTORS {
+            return self.rejected(
+                ActionCode::InvalidContributor,
+                "Synthetic contributor channel is outside the app-local range.",
+            );
+        }
+        if !valid_field_position(x, y) {
+            return self.rejected(
+                ActionCode::InvalidFieldPosition,
+                "Field position must be finite and inside the normalized scene.",
+            );
+        }
+        if self
+            .snapshot
+            .fields
+            .binary_search_by_key(&field_id, |field| field.field_id)
+            .is_ok()
+        {
+            return self.rejected(
+                ActionCode::DuplicateField,
+                "A field already uses that scene-local identifier.",
+            );
+        }
+        if self.snapshot.fields.len() >= MAX_PERSONAL_FIELDS {
+            return self.rejected(
+                ActionCode::FieldLimitReached,
+                "The bounded scene already contains eight personal fields.",
+            );
+        }
+        let expires_at_tick = match lifetime {
+            FieldLifetime::Persistent => None,
+            FieldLifetime::Expiring { steps } if steps > 0 && steps <= MAX_FIELD_LIFETIME_STEPS => {
+                self.snapshot.tick.checked_add(u64::from(steps))
+            }
+            FieldLifetime::Expiring { .. } => {
+                return self.rejected(
+                    ActionCode::InvalidFieldLifetime,
+                    "Expiring fields require a positive bounded fixed-step lifetime.",
+                );
+            }
+        };
+        if matches!(lifetime, FieldLifetime::Expiring { .. }) && expires_at_tick.is_none() {
+            return self.rejected(
+                ActionCode::InvalidFieldLifetime,
+                "Field expiry overflowed the deterministic tick range.",
+            );
+        }
+        let insertion = self
+            .snapshot
+            .fields
+            .binary_search_by_key(&field_id, |field| field.field_id)
+            .unwrap_or_else(|index| index);
+        self.snapshot.fields.insert(
+            insertion,
+            FieldState {
+                field_id,
+                contributor_id,
+                x,
+                y,
+                polarity,
+                expires_at_tick,
+            },
+        );
+        self.bump_state();
+        self.accepted(
+            ActionCode::FieldPlaced,
+            format!(
+                "Placed field {} for synthetic contributor {}.",
+                field_id + 1,
+                contributor_id + 1
+            ),
+            Vec::new(),
+        )
+    }
+
+    fn move_field(&mut self, field_id: u16, x: f32, y: f32) -> ActionReceipt {
+        if !valid_field_position(x, y) {
+            return self.rejected(
+                ActionCode::InvalidFieldPosition,
+                "Field position must be finite and inside the normalized scene.",
+            );
+        }
+        let Ok(index) = self
+            .snapshot
+            .fields
+            .binary_search_by_key(&field_id, |field| field.field_id)
+        else {
+            return self.rejected(ActionCode::MissingField, "That field is not active.");
+        };
+        self.snapshot.fields[index].x = x;
+        self.snapshot.fields[index].y = y;
+        self.bump_state();
+        self.accepted(
+            ActionCode::FieldMoved,
+            format!("Moved field {}.", field_id + 1),
+            Vec::new(),
+        )
+    }
+
+    fn set_field_polarity(&mut self, field_id: u16, polarity: FieldPolarity) -> ActionReceipt {
+        let Ok(index) = self
+            .snapshot
+            .fields
+            .binary_search_by_key(&field_id, |field| field.field_id)
+        else {
+            return self.rejected(ActionCode::MissingField, "That field is not active.");
+        };
+        self.snapshot.fields[index].polarity = polarity;
+        self.bump_state();
+        self.accepted(
+            ActionCode::FieldPolaritySet,
+            format!("Set field {} to {polarity:?}.", field_id + 1),
+            Vec::new(),
+        )
+    }
+
+    fn remove_field(&mut self, field_id: u16) -> ActionReceipt {
+        let Ok(index) = self
+            .snapshot
+            .fields
+            .binary_search_by_key(&field_id, |field| field.field_id)
+        else {
+            return self.rejected(ActionCode::MissingField, "That field is not active.");
+        };
+        self.snapshot.fields.remove(index);
+        self.bump_state();
+        self.accepted(
+            ActionCode::FieldRemoved,
+            format!("Removed field {}.", field_id + 1),
+            Vec::new(),
+        )
+    }
+
     fn start(&mut self) -> ActionReceipt {
         if !self.snapshot.running {
             self.snapshot.running = true;
@@ -538,6 +748,7 @@ impl DemoCore {
 
     fn step_simulation(&mut self) {
         let source = self.snapshot.particles.particles.clone();
+        let fields = self.snapshot.fields.clone();
         let swarm_centroid = particle_centroid(&source);
         let mut next = source.clone();
         for (index, particle) in source.iter().enumerate() {
@@ -610,6 +821,7 @@ impl DemoCore {
                 }
             };
             let acceleration = behavior_acceleration
+                + personal_field_acceleration(particle.position, &fields)
                 + soft_boundary_acceleration(particle.position, particle.velocity, target_speed);
 
             let mut velocity = particle.velocity + acceleration * FIXED_STEP_SECONDS;
@@ -625,6 +837,10 @@ impl DemoCore {
             next[index].age_seconds = particle.age_seconds + FIXED_STEP_SECONDS;
         }
         self.snapshot.tick = self.snapshot.tick.saturating_add(1);
+        let tick = self.snapshot.tick;
+        self.snapshot
+            .fields
+            .retain(|field| field.expires_at_tick.map_or(true, |expiry| expiry > tick));
         self.snapshot.particles.particles = next;
         self.snapshot.particles.time_seconds += FIXED_STEP_SECONDS;
         self.bump_state();
@@ -757,12 +973,34 @@ fn peer_dispersion_vector(
         })
 }
 
+fn personal_field_acceleration(position: Vec3, fields: &[FieldState]) -> Vec3 {
+    fields.iter().fold(Vec3::ZERO, |sum, field| {
+        let source = Vec3::new(field.x, field.y, 0.0);
+        let offset = source - position;
+        let distance_squared = offset.length_squared() + FIELD_SOFTENING * FIELD_SOFTENING;
+        let direction = match field.polarity {
+            FieldPolarity::Attract => offset,
+            FieldPolarity::Repel => Vec3::ZERO - offset,
+        };
+        let magnitude =
+            (FIELD_ACCELERATION_SCALE / distance_squared).min(MAX_FIELD_ACCELERATION_PER_SOURCE);
+        sum + normalized_or(direction, Vec3::ZERO) * magnitude
+    })
+}
+
 fn soft_boundary_acceleration(position: Vec3, velocity: Vec3, target_speed: f32) -> Vec3 {
     if position.x.abs() <= SOFT_WORLD_LIMIT && position.y.abs() <= SOFT_WORLD_LIMIT {
         return Vec3::ZERO;
     }
     let desired = normalized_or(Vec3::ZERO - position, velocity) * target_speed;
     (desired - velocity) * 6.0
+}
+
+fn valid_field_position(x: f32, y: f32) -> bool {
+    x.is_finite()
+        && y.is_finite()
+        && x.abs() <= FIELD_POSITION_LIMIT
+        && y.abs() <= FIELD_POSITION_LIMIT
 }
 
 fn initial_snapshot(seed: u64) -> DemoSnapshot {
@@ -792,6 +1030,7 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
         particles,
         speed_offsets: vec![0.0; MEMBER_COUNT],
         behaviors: vec![CollectiveBehavior::Flock; MEMBER_COUNT],
+        fields: Vec::new(),
         scope: TargetScope::Member,
         primary_member: Some(0),
         subgroup_members: (0..DEFAULT_SUBGROUP_COUNT).map(member_id).collect(),
@@ -823,6 +1062,37 @@ fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
         return Err(DemoError::InvalidSnapshot(
             "unexpected collective-behavior count",
         ));
+    }
+    if snapshot.fields.len() > MAX_PERSONAL_FIELDS {
+        return Err(DemoError::InvalidSnapshot("too many personal fields"));
+    }
+    let mut previous_field_id = None;
+    for field in &snapshot.fields {
+        if field.field_id > MAX_FIELD_ID {
+            return Err(DemoError::InvalidSnapshot(
+                "field identifier is out of range",
+            ));
+        }
+        if previous_field_id.is_some_and(|previous| previous >= field.field_id) {
+            return Err(DemoError::InvalidSnapshot(
+                "personal fields must be sorted and unique",
+            ));
+        }
+        if field.contributor_id >= MAX_SYNTHETIC_CONTRIBUTORS {
+            return Err(DemoError::InvalidSnapshot(
+                "synthetic contributor is out of range",
+            ));
+        }
+        if !valid_field_position(field.x, field.y) {
+            return Err(DemoError::InvalidSnapshot("field position is invalid"));
+        }
+        if field
+            .expires_at_tick
+            .is_some_and(|expiry| expiry <= snapshot.tick)
+        {
+            return Err(DemoError::InvalidSnapshot("field expiry is stale"));
+        }
+        previous_field_id = Some(field.field_id);
     }
     if snapshot
         .primary_member
