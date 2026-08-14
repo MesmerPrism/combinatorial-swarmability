@@ -3,8 +3,8 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActionReceipt, BehaviorCounts, CollectiveBehavior, DemoCore, DemoError, FieldLifetime,
-    FieldPolarity, PublicState, SemanticAction, FRAME_ROW_WIDTH,
+    ActionReceipt, BehaviorCounts, CollectiveBehavior, CollisionPolicy, DemoCore, DemoError,
+    FieldLifetime, FieldPolarity, PublicState, SemanticAction, TargetScope, FRAME_ROW_WIDTH,
 };
 
 const SPEC_SCHEMA: &str = "combinatorial.swarmability.comparison-spec.v1";
@@ -24,6 +24,7 @@ enum ScenarioId {
     RawSemanticEquivalent,
     RawSemanticContrast,
     SuperpositionLease,
+    SoftCollisionFree,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -47,6 +48,7 @@ struct ComparisonSpec {
 #[derive(Clone, Copy, Debug)]
 enum InputOperation {
     ConfigureDynamics,
+    ConfigureCollision,
     FirstInfluence,
     SecondInfluence,
     Advance { steps: usize },
@@ -96,6 +98,11 @@ struct LaneMetrics {
     behavior_distribution: BehaviorCounts,
     active_fields: usize,
     active_leases: usize,
+    minimum_surface_clearance: f32,
+    overlap_pair_count: usize,
+    near_miss_pair_count: usize,
+    total_collision_interventions: u64,
+    contact_tick_count: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -117,6 +124,11 @@ struct MetricDelta {
     behavior_distribution: BehaviorDelta,
     active_fields: i32,
     active_leases: i32,
+    minimum_surface_clearance: f32,
+    overlap_pair_count: i32,
+    near_miss_pair_count: i32,
+    total_collision_interventions: i64,
+    contact_tick_count: i64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -446,7 +458,7 @@ impl ComparisonRunner {
         let left_metrics = lane_metrics(&self.left, &left_state)?;
         let right_metrics = lane_metrics(&self.right, &right_state)?;
         let vector_relation = match self.spec.scenario_id {
-            ScenarioId::SuperpositionLease => "not_applicable",
+            ScenarioId::SuperpositionLease | ScenarioId::SoftCollisionFree => "not_applicable",
             _ if self.cursor == 0 => "pending_configuration",
             _ if left_state.resolved_dynamics == right_state.resolved_dynamics => "equivalent",
             _ => "intentionally_different",
@@ -530,6 +542,7 @@ const fn expected_tape_id(scenario: ScenarioId) -> &'static str {
         ScenarioId::RawSemanticEquivalent => "raw-semantic-midpoint.v1",
         ScenarioId::RawSemanticContrast => "raw-semantic-contrast.v1",
         ScenarioId::SuperpositionLease => "superposition-lease.v1",
+        ScenarioId::SoftCollisionFree => "soft-collision-free.v1",
     }
 }
 
@@ -556,6 +569,14 @@ fn canonical_events(scenario: ScenarioId) -> Vec<NormalizedInputEvent> {
                 operation: InputOperation::SecondInfluence,
             });
         }
+        ScenarioId::SoftCollisionFree => {
+            events.push(NormalizedInputEvent {
+                normalized_input: "navigation-field.rightward-boundary-pressure",
+                semantic_request:
+                    "Apply the same navigation field and pace while changing only overlap policy",
+                operation: InputOperation::ConfigureCollision,
+            });
+        }
     }
     for _ in 0..(COMPARISON_STEPS / STEPS_PER_EVENT) {
         events.push(NormalizedInputEvent {
@@ -579,6 +600,7 @@ fn apply_event(
     let before = core.public_state();
     let (actions, receipts, policy) = match event.operation {
         InputOperation::ConfigureDynamics => apply_dynamics_configuration(scenario, is_left, core)?,
+        InputOperation::ConfigureCollision => apply_collision_configuration(is_left, core)?,
         InputOperation::FirstInfluence => apply_first_influence(is_left, core)?,
         InputOperation::SecondInfluence => apply_second_influence(is_left, core)?,
         InputOperation::Advance { steps } => apply_advance(steps, core)?,
@@ -633,10 +655,64 @@ fn apply_dynamics_configuration(
             &[true, true, true, true],
             "The intentionally contrasting semantic profile compiles through the same core-owned interpolation.",
         ),
-        (ScenarioId::SuperpositionLease, _) => Err(ComparisonError::Invariant(
+        (ScenarioId::SuperpositionLease | ScenarioId::SoftCollisionFree, _) => Err(ComparisonError::Invariant(
             "authority scenario received a dynamics event",
         )),
     }
+}
+
+fn apply_collision_configuration(
+    is_left: bool,
+    core: &mut DemoCore,
+) -> Result<(Vec<String>, Vec<ActionReceipt>, String), ComparisonError> {
+    let policy = if is_left {
+        CollisionPolicy::SoftAvoidance
+    } else {
+        CollisionPolicy::CollisionFree
+    };
+    let (mut actions, mut receipts, _) = dispatch_actions(
+        core,
+        vec![
+            SemanticAction::SetCollisionPolicy { policy },
+            SemanticAction::SetSeparationWeight { value: 0.0 },
+            SemanticAction::SetBoundaryStrength { value: 0.0 },
+            SemanticAction::SetNavigationField {
+                x: 0.0,
+                y: 0.0,
+                direction_x: 1.0,
+                direction_y: 0.0,
+                radius: 1.2,
+                strength: 3.0,
+            },
+            SemanticAction::SetScope {
+                scope: TargetScope::Swarm,
+            },
+        ],
+        &[true, true, true, true, true],
+        "Both lanes receive the same app-owned navigation region and steering controls.",
+    )?;
+    let revision = core.public_state().selection_revision;
+    let (pace_actions, pace_receipts, _) = dispatch_actions(
+        core,
+        vec![SemanticAction::AdjustSpeed {
+            delta: 0.5,
+            expected_selection_revision: revision,
+        }],
+        &[true],
+        "The same whole-swarm pace request is applied after scope resolution.",
+    )?;
+    actions.extend(pace_actions);
+    receipts.extend(pace_receipts);
+    Ok((
+        actions,
+        receipts,
+        if is_left {
+            "Steering-only soft avoidance measures overlap but does not correct it."
+        } else {
+            "Collision-free execution adds anticipatory steering and deterministic disc projection after the same core integration."
+        }
+        .to_owned(),
+    ))
 }
 
 fn semantic_profile(space: f32, time: f32, weight: f32, flow: f32) -> Vec<SemanticAction> {
@@ -848,6 +924,20 @@ const fn lane_descriptor(scenario: ScenarioId, is_left: bool) -> LaneDescriptor 
             configuration_id: "two-operator-exclusive-lease.v1",
             catalogue_entry_id: "lease-expiry-and-handoff",
         },
+        (ScenarioId::SoftCollisionFree, true) => LaneDescriptor {
+            lane_id: "lane_a",
+            label: "Soft avoidance; overlap permitted",
+            mapping_id: "navigation_field_soft_avoidance",
+            configuration_id: "rightward-field-soft-overlap.v1",
+            catalogue_entry_id: "navigation-field",
+        },
+        (ScenarioId::SoftCollisionFree, false) => LaneDescriptor {
+            lane_id: "lane_b",
+            label: "Collision-free discs",
+            mapping_id: "navigation_field_collision_free",
+            configuration_id: "rightward-field-collision-free.v1",
+            catalogue_entry_id: "navigation-field",
+        },
     }
 }
 
@@ -898,6 +988,11 @@ fn lane_metrics(core: &DemoCore, state: &PublicState) -> Result<LaneMetrics, Com
         behavior_distribution: state.behavior_counts,
         active_fields: state.fields.len(),
         active_leases: state.leases.len(),
+        minimum_surface_clearance: state.clearance_metrics.minimum_surface_clearance,
+        overlap_pair_count: state.clearance_metrics.overlap_pair_count,
+        near_miss_pair_count: state.clearance_metrics.near_miss_pair_count,
+        total_collision_interventions: state.clearance_metrics.total_intervention_count,
+        contact_tick_count: state.clearance_metrics.contact_tick_count,
     })
 }
 
@@ -934,6 +1029,19 @@ fn metric_delta(left: &LaneMetrics, right: &LaneMetrics) -> MetricDelta {
         },
         active_fields: signed_delta_usize(left.active_fields, right.active_fields),
         active_leases: signed_delta_usize(left.active_leases, right.active_leases),
+        minimum_surface_clearance: round_metric(
+            right.minimum_surface_clearance - left.minimum_surface_clearance,
+        ),
+        overlap_pair_count: signed_delta_usize(left.overlap_pair_count, right.overlap_pair_count),
+        near_miss_pair_count: signed_delta_usize(
+            left.near_miss_pair_count,
+            right.near_miss_pair_count,
+        ),
+        total_collision_interventions: signed_delta_u64(
+            left.total_collision_interventions,
+            right.total_collision_interventions,
+        ),
+        contact_tick_count: signed_delta_u64(left.contact_tick_count, right.contact_tick_count),
     }
 }
 
@@ -1024,6 +1132,36 @@ fn metric_definitions() -> Vec<MetricDefinition> {
             label: "Lease provenance",
             unit: "active leases",
             definition: "Current app-local per-member leases with holder, expiry, and revision provenance.",
+        },
+        MetricDefinition {
+            metric_id: "minimum_surface_clearance",
+            label: "Minimum surface clearance",
+            unit: "normalized scene units",
+            definition: "Smallest signed edge-to-edge distance between any rendered disc pair; negative means overlap.",
+        },
+        MetricDefinition {
+            metric_id: "overlap_pair_count",
+            label: "Overlapping pairs",
+            unit: "disc pairs",
+            definition: "Unique rendered-disc pairs with negative surface clearance at this tick.",
+        },
+        MetricDefinition {
+            metric_id: "near_miss_pair_count",
+            label: "Near-miss pairs",
+            unit: "disc pairs",
+            definition: "Non-overlapping pairs with no more than 0.03 scene units of surface clearance.",
+        },
+        MetricDefinition {
+            metric_id: "total_collision_interventions",
+            label: "Collision interventions",
+            unit: "pair corrections",
+            definition: "Deterministic post-integration pair corrections since the canonical start.",
+        },
+        MetricDefinition {
+            metric_id: "contact_tick_count",
+            label: "Tentative-contact ticks",
+            unit: "fixed steps",
+            definition: "Fixed steps whose tentative integrated state contained at least one overlapping pair.",
         },
     ]
 }

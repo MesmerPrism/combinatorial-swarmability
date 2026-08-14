@@ -256,6 +256,60 @@ fn superposition_and_lease_show_distinct_policy_outcomes_without_cross_lane_stat
 }
 
 #[test]
+fn soft_and_collision_free_lanes_share_navigation_input_but_diverge_on_clearance_policy() {
+    let mut runner = ComparisonRunner::from_spec_json(&spec(
+        "soft_collision_free",
+        "soft-collision-free.v1",
+        "9090",
+    ))
+    .expect("runner builds");
+    let initial = result(&runner);
+    assert_eq!(initial["left"]["state"], initial["right"]["state"]);
+
+    runner.step_event_json().expect("configuration applies");
+    let configured = result(&runner);
+    assert_eq!(configured["vector_relation"], "not_applicable");
+    assert_eq!(
+        configured["left"]["state"]["navigation_field"],
+        configured["right"]["state"]["navigation_field"]
+    );
+    assert_eq!(
+        configured["left"]["state"]["execution_settings"]["collision_policy"],
+        "soft_avoidance"
+    );
+    assert_eq!(
+        configured["right"]["state"]["execution_settings"]["collision_policy"],
+        "collision_free"
+    );
+    assert_eq!(
+        configured["left"]["descriptor"]["catalogue_entry_id"],
+        "navigation-field"
+    );
+
+    let final_result = replay(&mut runner);
+    assert!(
+        final_result["left"]["metrics"]["overlap_pair_count"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert_eq!(final_result["right"]["metrics"]["overlap_pair_count"], 0);
+    assert!(
+        final_result["right"]["metrics"]["total_collision_interventions"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert!(
+        final_result["delta_right_minus_left"]["minimum_surface_clearance"]
+            .as_f64()
+            .unwrap()
+            > 0.0
+    );
+    assert_eq!(final_result["invariants"]["lockstep_tick"], true);
+}
+
+#[test]
 fn comparison_does_not_mutate_an_ordinary_atlas_core() {
     let mut ordinary = DemoCore::new(7070);
     assert!(ordinary.dispatch(SemanticAction::Step).accepted);
@@ -286,6 +340,7 @@ fn tape_results_traces_and_frame_rows_remain_bounded_and_well_formed() {
         ("raw_semantic_equivalent", "raw-semantic-midpoint.v1"),
         ("raw_semantic_contrast", "raw-semantic-contrast.v1"),
         ("superposition_lease", "superposition-lease.v1"),
+        ("soft_collision_free", "soft-collision-free.v1"),
     ] {
         let mut runner =
             ComparisonRunner::from_spec_json(&spec(scenario, tape, "8080")).expect("runner builds");
@@ -305,7 +360,7 @@ fn tape_results_traces_and_frame_rows_remain_bounded_and_well_formed() {
         );
         assert_eq!(
             final_result["metric_definitions"].as_array().unwrap().len(),
-            10
+            15
         );
     }
 }

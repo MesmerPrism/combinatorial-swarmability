@@ -6,9 +6,10 @@ use rusty_matter_particles::{ParticleRenderPayload, ParticleSet, ParticleState};
 use serde::{Deserialize, Serialize};
 
 use crate::action::{
-    ActionCode, ActionReceipt, BehaviorCounts, CollectiveBehavior, DynamicsControlMode,
-    DynamicsRates, FieldLifetime, FieldPolarity, FieldSummary, GroupPartitionRule, GroupSummary,
-    HandoffDecision, LeaseSummary, MemberSummary, PublicState, ResolvedDynamics, SemanticAction,
+    ActionCode, ActionReceipt, BehaviorCounts, ClearanceMetrics, CollectiveBehavior,
+    CollisionPolicy, DynamicsControlMode, DynamicsRates, ExecutionSettings, FieldLifetime,
+    FieldPolarity, FieldSummary, GroupPartitionRule, GroupSummary, HandoffDecision, LeaseSummary,
+    MemberSummary, NavigationFieldSummary, PublicState, ResolvedDynamics, SemanticAction,
     SemanticQualities, TargetScope,
 };
 use crate::replay::{
@@ -61,6 +62,39 @@ pub const MAX_SYNTHETIC_OPERATORS: u8 = 4;
 pub const MAX_ACTIVE_LEASES: usize = 8;
 /// Maximum fixed-step lease lifetime accepted by the public reconstruction.
 pub const MAX_LEASE_LIFETIME_STEPS: u32 = 600;
+/// Minimum accepted local separation steering multiplier.
+pub const MIN_SEPARATION_WEIGHT: f32 = 0.0;
+/// Maximum accepted local separation steering multiplier.
+pub const MAX_SEPARATION_WEIGHT: f32 = 3.0;
+/// Minimum accepted local separation steering radius.
+pub const MIN_SEPARATION_RADIUS: f32 = 0.08;
+/// Maximum accepted local separation steering radius.
+pub const MAX_SEPARATION_RADIUS: f32 = 0.30;
+/// Minimum accepted maximum target speed.
+pub const MIN_SPEED_LIMIT: f32 = 0.20;
+/// Maximum accepted maximum target speed.
+pub const MAX_SPEED_LIMIT: f32 = 1.50;
+/// Minimum accepted maximum steering acceleration.
+pub const MIN_ACCELERATION_LIMIT: f32 = 0.50;
+/// Maximum accepted maximum steering acceleration.
+pub const MAX_ACCELERATION_LIMIT: f32 = 12.0;
+/// Maximum accepted soft-boundary steering strength.
+pub const MAX_BOUNDARY_STRENGTH: f32 = 12.0;
+/// Minimum accepted navigation-region radius.
+pub const MIN_NAVIGATION_FIELD_RADIUS: f32 = 0.10;
+/// Maximum accepted navigation-region radius.
+pub const MAX_NAVIGATION_FIELD_RADIUS: f32 = 1.20;
+/// Maximum accepted navigation-field acceleration.
+pub const MAX_NAVIGATION_FIELD_STRENGTH: f32 = 3.0;
+/// Default app-owned collision, separation, speed, acceleration, and boundary controls.
+pub const DEFAULT_EXECUTION_SETTINGS: ExecutionSettings = ExecutionSettings {
+    collision_policy: CollisionPolicy::CollisionFree,
+    separation_weight: 1.0,
+    separation_radius: 0.13,
+    speed_limit: 1.10,
+    acceleration_limit: 8.0,
+    boundary_strength: 6.0,
+};
 
 // App-owned qualitative interpolation endpoints. The source projection supplies
 // directions and coupled variables, not portable coefficients.
@@ -87,10 +121,8 @@ const MAX_CATCH_UP_STEPS: u32 = 8;
 const WORLD_LIMIT: f32 = 0.94;
 const BASE_SPEED: f32 = 0.36;
 const MIN_SPEED: f32 = 0.08;
-const MAX_SPEED: f32 = 1.10;
 const MAX_SPEED_OFFSET: f32 = 0.70;
 const NEIGHBOR_RADIUS_SQUARED: f32 = 0.42 * 0.42;
-const SEPARATION_RADIUS_SQUARED: f32 = 0.13 * 0.13;
 const DISPERSE_RADIUS_SQUARED: f32 = 0.55 * 0.55;
 const SOFT_WORLD_LIMIT: f32 = 0.78;
 const FIELD_POSITION_LIMIT: f32 = 0.90;
@@ -99,6 +131,10 @@ const FIELD_SOFTENING: f32 = 0.075;
 const FIELD_ACCELERATION_SCALE: f32 = 0.22;
 const MAX_FIELD_ACCELERATION_PER_SOURCE: f32 = 1.65;
 const FORMATION_SCALE_ACCELERATION: f32 = 0.85;
+const NEAR_MISS_MARGIN: f32 = 0.03;
+const PREDICTION_HORIZON_SECONDS: f32 = 0.25;
+const PREDICTIVE_AVOIDANCE_ACCELERATION: f32 = 8.0;
+const COLLISION_PROJECTION_ITERATIONS: usize = 64;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -127,6 +163,17 @@ struct LeaseState {
     acquired_at_tick: u64,
     expires_at_tick: u64,
     pending_handoff_to: Option<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct NavigationFieldState {
+    x: f32,
+    y: f32,
+    direction_x: f32,
+    direction_y: f32,
+    radius: f32,
+    strength: f32,
 }
 
 /// Error returned when a deterministic snapshot or Matter payload is invalid.
@@ -172,6 +219,11 @@ struct DemoSnapshot {
     dynamics_control_mode: DynamicsControlMode,
     semantic_qualities: SemanticQualities,
     resolved_dynamics: ResolvedDynamics,
+    execution_settings: ExecutionSettings,
+    navigation_field: Option<NavigationFieldState>,
+    last_step_intervention_count: u64,
+    total_intervention_count: u64,
+    contact_tick_count: u64,
     fields: Vec<FieldState>,
     groups: Vec<GroupState>,
     leases: Vec<LeaseState>,
@@ -302,6 +354,21 @@ impl DemoCore {
             SemanticAction::SetAlignment { rate } => self.set_alignment(rate),
             SemanticAction::SetCohesion { rate } => self.set_cohesion(rate),
             SemanticAction::SetSeparation { rate } => self.set_separation(rate),
+            SemanticAction::SetCollisionPolicy { policy } => self.set_collision_policy(policy),
+            SemanticAction::SetSeparationWeight { value } => self.set_separation_weight(value),
+            SemanticAction::SetSeparationRadius { value } => self.set_separation_radius(value),
+            SemanticAction::SetSpeedLimit { value } => self.set_speed_limit(value),
+            SemanticAction::SetAccelerationLimit { value } => self.set_acceleration_limit(value),
+            SemanticAction::SetBoundaryStrength { value } => self.set_boundary_strength(value),
+            SemanticAction::SetNavigationField {
+                x,
+                y,
+                direction_x,
+                direction_y,
+                radius,
+                strength,
+            } => self.set_navigation_field(x, y, direction_x, direction_y, radius, strength),
+            SemanticAction::ClearNavigationField => self.clear_navigation_field(),
             SemanticAction::SetSpaceQuality { value } => self.set_space_quality(value),
             SemanticAction::SetTimeQuality { value } => self.set_time_quality(value),
             SemanticAction::SetWeightQuality { value } => self.set_weight_quality(value),
@@ -531,6 +598,23 @@ impl DemoCore {
                 }
             })
             .collect();
+        let clearance_metrics = clearance_metrics(
+            &self.snapshot.particles.particles,
+            self.snapshot.last_step_intervention_count,
+            self.snapshot.total_intervention_count,
+            self.snapshot.contact_tick_count,
+        );
+        let navigation_field = self
+            .snapshot
+            .navigation_field
+            .map(|field| NavigationFieldSummary {
+                x: round_for_public(field.x),
+                y: round_for_public(field.y),
+                direction_x: round_for_public(field.direction_x),
+                direction_y: round_for_public(field.direction_y),
+                radius: round_for_public(field.radius),
+                strength: round_for_public(field.strength),
+            });
         PublicState {
             seed: self.snapshot.seed.to_string(),
             tick: self.snapshot.tick,
@@ -546,6 +630,9 @@ impl DemoCore {
             dynamics_control_mode: self.snapshot.dynamics_control_mode,
             semantic_qualities: public_qualities(self.snapshot.semantic_qualities),
             resolved_dynamics: public_resolved(self.snapshot.resolved_dynamics),
+            execution_settings: public_execution_settings(self.snapshot.execution_settings),
+            clearance_metrics,
+            navigation_field,
             groups,
             morphology_revision: self.snapshot.morphology_revision,
             leases,
@@ -791,6 +878,152 @@ impl DemoCore {
         self.accepted(
             ActionCode::SeparationSet,
             format!("Set the swarm-wide separation-mode entry rate to {rate:.2}."),
+            Vec::new(),
+        )
+    }
+
+    fn set_collision_policy(&mut self, policy: CollisionPolicy) -> ActionReceipt {
+        self.snapshot.execution_settings.collision_policy = policy;
+        self.bump_state();
+        self.accepted(
+            ActionCode::CollisionPolicySet,
+            format!("Set disc execution to {policy:?}."),
+            Vec::new(),
+        )
+    }
+
+    fn set_separation_weight(&mut self, value: f32) -> ActionReceipt {
+        if !valid_range(value, MIN_SEPARATION_WEIGHT, MAX_SEPARATION_WEIGHT) {
+            return self.rejected(
+                ActionCode::InvalidExecutionSetting,
+                "Separation weight must be finite and between 0 and 3.",
+            );
+        }
+        self.snapshot.execution_settings.separation_weight = value;
+        self.bump_state();
+        self.accepted(
+            ActionCode::SeparationWeightSet,
+            format!("Set local separation steering weight to {value:.2}."),
+            Vec::new(),
+        )
+    }
+
+    fn set_separation_radius(&mut self, value: f32) -> ActionReceipt {
+        if !valid_range(value, MIN_SEPARATION_RADIUS, MAX_SEPARATION_RADIUS) {
+            return self.rejected(
+                ActionCode::InvalidExecutionSetting,
+                "Separation radius must be finite and between 0.08 and 0.30 world units.",
+            );
+        }
+        self.snapshot.execution_settings.separation_radius = value;
+        self.bump_state();
+        self.accepted(
+            ActionCode::SeparationRadiusSet,
+            format!("Set local separation steering radius to {value:.2} world units."),
+            Vec::new(),
+        )
+    }
+
+    fn set_speed_limit(&mut self, value: f32) -> ActionReceipt {
+        if !valid_range(value, MIN_SPEED_LIMIT, MAX_SPEED_LIMIT) {
+            return self.rejected(
+                ActionCode::InvalidExecutionSetting,
+                "Speed limit must be finite and between 0.20 and 1.50 world units per second.",
+            );
+        }
+        self.snapshot.execution_settings.speed_limit = value;
+        self.bump_state();
+        self.accepted(
+            ActionCode::SpeedLimitSet,
+            format!("Set maximum target speed to {value:.2} world units per second."),
+            Vec::new(),
+        )
+    }
+
+    fn set_acceleration_limit(&mut self, value: f32) -> ActionReceipt {
+        if !valid_range(value, MIN_ACCELERATION_LIMIT, MAX_ACCELERATION_LIMIT) {
+            return self.rejected(
+                ActionCode::InvalidExecutionSetting,
+                "Acceleration limit must be finite and between 0.50 and 12.00 world units per second squared.",
+            );
+        }
+        self.snapshot.execution_settings.acceleration_limit = value;
+        self.bump_state();
+        self.accepted(
+            ActionCode::AccelerationLimitSet,
+            format!("Set maximum steering acceleration to {value:.2}."),
+            Vec::new(),
+        )
+    }
+
+    fn set_boundary_strength(&mut self, value: f32) -> ActionReceipt {
+        if !valid_range(value, 0.0, MAX_BOUNDARY_STRENGTH) {
+            return self.rejected(
+                ActionCode::InvalidExecutionSetting,
+                "Boundary strength must be finite and between 0 and 12.",
+            );
+        }
+        self.snapshot.execution_settings.boundary_strength = value;
+        self.bump_state();
+        self.accepted(
+            ActionCode::BoundaryStrengthSet,
+            format!("Set soft-boundary steering strength to {value:.2}."),
+            Vec::new(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn set_navigation_field(
+        &mut self,
+        x: f32,
+        y: f32,
+        direction_x: f32,
+        direction_y: f32,
+        radius: f32,
+        strength: f32,
+    ) -> ActionReceipt {
+        let direction = Vec3::new(direction_x, direction_y, 0.0);
+        if !valid_field_position(x, y)
+            || !direction_x.is_finite()
+            || !direction_y.is_finite()
+            || direction.length_squared() <= 0.000_001
+            || !valid_range(
+                radius,
+                MIN_NAVIGATION_FIELD_RADIUS,
+                MAX_NAVIGATION_FIELD_RADIUS,
+            )
+            || !valid_range(strength, 0.0, MAX_NAVIGATION_FIELD_STRENGTH)
+        {
+            return self.rejected(
+                ActionCode::InvalidNavigationField,
+                "Navigation field requires a valid centre, non-zero finite direction, radius 0.10 to 1.20, and strength 0 to 3.",
+            );
+        }
+        let canonical_direction = normalized_or(direction, Vec3::new(1.0, 0.0, 0.0));
+        self.snapshot.navigation_field = Some(NavigationFieldState {
+            x,
+            y,
+            direction_x: canonical_direction.x,
+            direction_y: canonical_direction.y,
+            radius,
+            strength,
+        });
+        self.bump_state();
+        self.accepted(
+            ActionCode::NavigationFieldSet,
+            "Installed one directional navigation region; local collision policy remains independent."
+                .to_owned(),
+            Vec::new(),
+        )
+    }
+
+    fn clear_navigation_field(&mut self) -> ActionReceipt {
+        self.snapshot.navigation_field = None;
+        self.bump_state();
+        self.accepted(
+            ActionCode::NavigationFieldCleared,
+            "Cleared the directional navigation region without changing local collision policy."
+                .to_owned(),
             Vec::new(),
         )
     }
@@ -1592,6 +1825,9 @@ impl DemoCore {
         let fields = self.snapshot.fields.clone();
         let groups = self.snapshot.groups.clone();
         let resolved = self.snapshot.resolved_dynamics;
+        let settings = self.snapshot.execution_settings;
+        let navigation_field = self.snapshot.navigation_field;
+        let separation_radius_squared = settings.separation_radius * settings.separation_radius;
         let next_tick = self.snapshot.tick.saturating_add(1);
         let mut next = source.clone();
         for (index, particle) in source.iter().enumerate() {
@@ -1614,14 +1850,14 @@ impl DemoCore {
                 neighbor_count += 1;
                 alignment = alignment + other.velocity;
                 cohesion = cohesion + other.position;
-                if distance_squared < SEPARATION_RADIUS_SQUARED {
+                if distance_squared < separation_radius_squared {
                     separation = separation + away / distance_squared.max(0.000_1);
                 }
             }
 
             let target_speed = ((BASE_SPEED + self.snapshot.speed_offsets[index])
                 * resolved.speed_scale)
-                .clamp(MIN_SPEED, MAX_SPEED);
+                .clamp(MIN_SPEED.min(settings.speed_limit), settings.speed_limit);
             let mut flock_acceleration = Vec3::ZERO;
             if neighbor_count > 0 {
                 let inverse_count = 1.0 / f32::from(neighbor_count);
@@ -1629,7 +1865,7 @@ impl DemoCore {
                 cohesion = cohesion * inverse_count;
                 flock_acceleration = (alignment - particle.velocity) * 0.68
                     + (cohesion - particle.position) * 0.46
-                    + separation * 0.028;
+                    + separation * (0.028 * settings.separation_weight);
             }
 
             let behavior = self.snapshot.behaviors[index];
@@ -1653,7 +1889,9 @@ impl DemoCore {
                     } else {
                         Vec3::ZERO
                     };
-                    flock_acceleration * 0.52 + collective_steering * 1.7 + separation * 0.11
+                    flock_acceleration * 0.52
+                        + collective_steering * 1.7
+                        + separation * (0.11 * settings.separation_weight)
                 }
                 CollectiveBehavior::Disperse => {
                     let peer_dispersion = peer_dispersion_vector(
@@ -1674,28 +1912,58 @@ impl DemoCore {
                     } else {
                         Vec3::ZERO
                     };
-                    flock_acceleration * 0.38 + collective_steering * 2.4 + separation * 0.055
+                    flock_acceleration * 0.38
+                        + collective_steering * 2.4
+                        + separation * (0.055 * settings.separation_weight)
                 }
             };
             let steering_response = 1.0 - resolved.damping * 0.6;
             let controlled_acceleration = behavior_acceleration
                 + personal_field_acceleration(particle.position, &fields)
-                + formation_scale_acceleration(particle.position, morphology_group, &source);
+                + formation_scale_acceleration(particle.position, morphology_group, &source)
+                + navigation_field_acceleration(particle.position, navigation_field)
+                + if settings.collision_policy == CollisionPolicy::CollisionFree {
+                    predictive_collision_avoidance(index, particle, &source)
+                } else {
+                    Vec3::ZERO
+                };
             let jitter = deterministic_jitter(
                 self.snapshot.seed,
                 next_tick,
                 u64::try_from(index).unwrap_or_default(),
                 resolved.jitter,
             );
-            let acceleration = controlled_acceleration * steering_response
-                + jitter
-                + soft_boundary_acceleration(particle.position, particle.velocity, target_speed);
+            let acceleration = limit_magnitude(
+                controlled_acceleration * steering_response
+                    + jitter
+                    + soft_boundary_acceleration(
+                        particle.position,
+                        particle.velocity,
+                        target_speed,
+                        settings.boundary_strength,
+                    ),
+                settings.acceleration_limit,
+            );
 
             let (position, velocity) = integrate_particle(particle, acceleration, target_speed);
 
             next[index].position = position;
             next[index].velocity = velocity;
             next[index].age_seconds = particle.age_seconds + FIXED_STEP_SECONDS;
+        }
+        let tentative_overlaps = count_overlaps(&next);
+        let interventions = if settings.collision_policy == CollisionPolicy::CollisionFree {
+            project_non_overlap(&mut next)
+        } else {
+            0
+        };
+        self.snapshot.last_step_intervention_count = interventions;
+        self.snapshot.total_intervention_count = self
+            .snapshot
+            .total_intervention_count
+            .saturating_add(interventions);
+        if tentative_overlaps > 0 {
+            self.snapshot.contact_tick_count = self.snapshot.contact_tick_count.saturating_add(1);
         }
         self.apply_dynamics_transitions(next_tick);
         self.snapshot.tick = next_tick;
@@ -1966,12 +2234,177 @@ fn personal_field_acceleration(position: Vec3, fields: &[FieldState]) -> Vec3 {
     })
 }
 
-fn soft_boundary_acceleration(position: Vec3, velocity: Vec3, target_speed: f32) -> Vec3 {
+fn navigation_field_acceleration(position: Vec3, field: Option<NavigationFieldState>) -> Vec3 {
+    let Some(field) = field else {
+        return Vec3::ZERO;
+    };
+    let offset = position - Vec3::new(field.x, field.y, 0.0);
+    let distance = offset.length();
+    if distance >= field.radius {
+        return Vec3::ZERO;
+    }
+    let falloff = 1.0 - distance / field.radius;
+    Vec3::new(field.direction_x, field.direction_y, 0.0) * (field.strength * falloff)
+}
+
+fn predictive_collision_avoidance(
+    index: usize,
+    particle: &ParticleState,
+    particles: &[ParticleState],
+) -> Vec3 {
+    particles
+        .iter()
+        .enumerate()
+        .filter(|(other_index, _)| *other_index != index)
+        .fold(Vec3::ZERO, |sum, (other_index, other)| {
+            let relative_position = other.position - particle.position;
+            let relative_velocity = other.velocity - particle.velocity;
+            let relative_speed_squared = relative_velocity.length_squared();
+            if relative_speed_squared <= 0.000_001 {
+                return sum;
+            }
+            let closest_time = (-(relative_position.dot(relative_velocity))
+                / relative_speed_squared)
+                .clamp(0.0, PREDICTION_HORIZON_SECONDS);
+            if closest_time <= f32::EPSILON {
+                return sum;
+            }
+            let closest_offset = relative_position + relative_velocity * closest_time;
+            let threshold = particle.radius + other.radius + NEAR_MISS_MARGIN;
+            let predicted_distance = closest_offset.length();
+            if predicted_distance >= threshold {
+                return sum;
+            }
+            let fallback = deterministic_pair_normal(index, other_index);
+            let away = normalized_or(Vec3::ZERO - closest_offset, fallback);
+            let urgency = 1.0 - closest_time / PREDICTION_HORIZON_SECONDS;
+            let proximity = 1.0 - predicted_distance / threshold;
+            sum + away * (PREDICTIVE_AVOIDANCE_ACCELERATION * proximity * (0.35 + urgency))
+        })
+}
+
+fn soft_boundary_acceleration(
+    position: Vec3,
+    velocity: Vec3,
+    target_speed: f32,
+    strength: f32,
+) -> Vec3 {
     if position.x.abs() <= SOFT_WORLD_LIMIT && position.y.abs() <= SOFT_WORLD_LIMIT {
         return Vec3::ZERO;
     }
     let desired = normalized_or(Vec3::ZERO - position, velocity) * target_speed;
-    (desired - velocity) * 6.0
+    (desired - velocity) * strength
+}
+
+fn limit_magnitude(value: Vec3, maximum: f32) -> Vec3 {
+    let length = value.length();
+    if length > maximum {
+        value / length * maximum
+    } else {
+        value
+    }
+}
+
+fn deterministic_pair_normal(first: usize, second: usize) -> Vec3 {
+    let (low, high, sign) = if first < second {
+        (first, second, -1.0)
+    } else {
+        (second, first, 1.0)
+    };
+    let base = match (low.wrapping_mul(31) + high.wrapping_mul(17)) % 4 {
+        0 => Vec3::new(1.0, 0.0, 0.0),
+        1 => Vec3::new(0.0, 1.0, 0.0),
+        2 => normalized_or(Vec3::new(1.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0)),
+        _ => normalized_or(Vec3::new(1.0, -1.0, 0.0), Vec3::new(1.0, 0.0, 0.0)),
+    };
+    base * sign
+}
+
+fn count_overlaps(particles: &[ParticleState]) -> usize {
+    let mut overlaps = 0;
+    for first in 0..particles.len() {
+        for second in (first + 1)..particles.len() {
+            let distance = (particles[second].position - particles[first].position).length();
+            if distance + 0.000_01 < particles[first].radius + particles[second].radius {
+                overlaps += 1;
+            }
+        }
+    }
+    overlaps
+}
+
+fn clearance_metrics(
+    particles: &[ParticleState],
+    last_step_intervention_count: u64,
+    total_intervention_count: u64,
+    contact_tick_count: u64,
+) -> ClearanceMetrics {
+    let mut minimum_surface_clearance = f32::INFINITY;
+    let mut overlap_pair_count = 0;
+    let mut near_miss_pair_count = 0;
+    for first in 0..particles.len() {
+        for second in (first + 1)..particles.len() {
+            let distance = (particles[second].position - particles[first].position).length();
+            let clearance = distance - particles[first].radius - particles[second].radius;
+            minimum_surface_clearance = minimum_surface_clearance.min(clearance);
+            if clearance < -0.000_01 {
+                overlap_pair_count += 1;
+            } else if clearance <= NEAR_MISS_MARGIN {
+                near_miss_pair_count += 1;
+            }
+        }
+    }
+    ClearanceMetrics {
+        minimum_surface_clearance: round_for_public(minimum_surface_clearance.max(-1.0)),
+        overlap_pair_count,
+        near_miss_pair_count,
+        last_step_intervention_count,
+        total_intervention_count,
+        contact_tick_count,
+    }
+}
+
+fn project_non_overlap(particles: &mut [ParticleState]) -> u64 {
+    let mut interventions = 0_u64;
+    for _ in 0..COLLISION_PROJECTION_ITERATIONS {
+        let mut corrected_this_iteration = false;
+        for first in 0..particles.len() {
+            for second in (first + 1)..particles.len() {
+                let (left, right) = particles.split_at_mut(second);
+                let first_particle = &mut left[first];
+                let second_particle = &mut right[0];
+                let offset = second_particle.position - first_particle.position;
+                let distance = offset.length();
+                let required = first_particle.radius + second_particle.radius;
+                if distance + 0.000_01 >= required {
+                    continue;
+                }
+                let normal = if distance > 0.000_01 {
+                    offset / distance
+                } else {
+                    deterministic_pair_normal(first, second)
+                };
+                let correction = (required - distance + 0.000_02) * 0.5;
+                first_particle.position = first_particle.position - normal * correction;
+                second_particle.position = second_particle.position + normal * correction;
+                contain_particle(first_particle);
+                contain_particle(second_particle);
+                let relative_normal_velocity =
+                    (second_particle.velocity - first_particle.velocity).dot(normal);
+                if relative_normal_velocity < 0.0 {
+                    let impulse = -relative_normal_velocity * 0.5;
+                    first_particle.velocity = first_particle.velocity - normal * impulse;
+                    second_particle.velocity = second_particle.velocity + normal * impulse;
+                }
+                interventions = interventions.saturating_add(1);
+                corrected_this_iteration = true;
+            }
+        }
+        if !corrected_this_iteration {
+            break;
+        }
+    }
+    interventions
 }
 
 fn valid_field_position(x: f32, y: f32) -> bool {
@@ -1979,6 +2412,28 @@ fn valid_field_position(x: f32, y: f32) -> bool {
         && y.is_finite()
         && x.abs() <= FIELD_POSITION_LIMIT
         && y.abs() <= FIELD_POSITION_LIMIT
+}
+
+fn valid_range(value: f32, minimum: f32, maximum: f32) -> bool {
+    value.is_finite() && (minimum..=maximum).contains(&value)
+}
+
+fn valid_execution_settings(settings: ExecutionSettings) -> bool {
+    valid_range(
+        settings.separation_weight,
+        MIN_SEPARATION_WEIGHT,
+        MAX_SEPARATION_WEIGHT,
+    ) && valid_range(
+        settings.separation_radius,
+        MIN_SEPARATION_RADIUS,
+        MAX_SEPARATION_RADIUS,
+    ) && valid_range(settings.speed_limit, MIN_SPEED_LIMIT, MAX_SPEED_LIMIT)
+        && valid_range(
+            settings.acceleration_limit,
+            MIN_ACCELERATION_LIMIT,
+            MAX_ACCELERATION_LIMIT,
+        )
+        && valid_range(settings.boundary_strength, 0.0, MAX_BOUNDARY_STRENGTH)
 }
 
 fn valid_dynamics_rate(rate: f32) -> bool {
@@ -2072,6 +2527,17 @@ fn public_resolved(resolved: ResolvedDynamics) -> ResolvedDynamics {
     }
 }
 
+fn public_execution_settings(settings: ExecutionSettings) -> ExecutionSettings {
+    ExecutionSettings {
+        collision_policy: settings.collision_policy,
+        separation_weight: round_for_public(settings.separation_weight),
+        separation_radius: round_for_public(settings.separation_radius),
+        speed_limit: round_for_public(settings.speed_limit),
+        acceleration_limit: round_for_public(settings.acceleration_limit),
+        boundary_strength: round_for_public(settings.boundary_strength),
+    }
+}
+
 fn deterministic_unit(seed: u64, tick: u64, member: u64, stream: u64) -> f32 {
     let mut value = seed
         ^ tick.wrapping_mul(0x9e37_79b9_7f4a_7c15)
@@ -2098,20 +2564,28 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
     let mut particles =
         ParticleSet::with_capacity("combinatorial-swarmability.scene", MEMBER_COUNT);
     for index in 0..MEMBER_COUNT {
-        let position = Vec3::new(
-            rng.signed_unit_f32() * 0.78,
-            rng.signed_unit_f32() * 0.78,
-            0.0,
-        );
+        let radius = 0.035 + f32::from(member_id(index) % 3) * 0.004;
+        let mut position = None;
+        for _ in 0..128 {
+            let candidate = Vec3::new(
+                rng.signed_unit_f32() * 0.78,
+                rng.signed_unit_f32() * 0.78,
+                0.0,
+            );
+            let is_clear = particles.particles.iter().all(|existing| {
+                (candidate - existing.position).length() >= radius + existing.radius + 0.01
+            });
+            if is_clear {
+                position = Some(candidate);
+                break;
+            }
+        }
+        let position = position.unwrap_or_else(|| deterministic_spawn_fallback(index));
         let direction = normalized_or(
             Vec3::new(rng.signed_unit_f32(), rng.signed_unit_f32(), 0.0),
             Vec3::new(1.0, 0.0, 0.0),
         );
-        let mut particle = ParticleState::new(
-            format!("member-{index:02}"),
-            position,
-            0.035 + f32::from(member_id(index) % 3) * 0.004,
-        );
+        let mut particle = ParticleState::new(format!("member-{index:02}"), position, radius);
         particle.velocity = direction * BASE_SPEED;
         particles.push(particle);
     }
@@ -2124,6 +2598,11 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
         dynamics_control_mode: DynamicsControlMode::Raw,
         semantic_qualities: DEFAULT_SEMANTIC_QUALITIES,
         resolved_dynamics: resolve_raw_dynamics(DEFAULT_DYNAMICS_RATES),
+        execution_settings: DEFAULT_EXECUTION_SETTINGS,
+        navigation_field: None,
+        last_step_intervention_count: 0,
+        total_intervention_count: 0,
+        contact_tick_count: 0,
         fields: Vec::new(),
         groups: vec![GroupState {
             group_id: 0,
@@ -2142,6 +2621,16 @@ fn initial_snapshot(seed: u64) -> DemoSnapshot {
         morphology_revision: 0,
         authority_revision: 0,
     }
+}
+
+fn deterministic_spawn_fallback(index: usize) -> Vec3 {
+    let column = index % 6;
+    let row = index / 6;
+    Vec3::new(
+        -0.65 + f32::from(u16::try_from(column).unwrap_or_default()) * 0.26,
+        -0.39 + f32::from(u16::try_from(row).unwrap_or_default()) * 0.26,
+        0.0,
+    )
 }
 
 fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
@@ -2167,6 +2656,7 @@ fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
     }
     validate_snapshot_groups(snapshot)?;
     validate_snapshot_dynamics(snapshot)?;
+    validate_snapshot_execution(snapshot)?;
     validate_snapshot_leases(snapshot)?;
     if snapshot.fields.len() > MAX_PERSONAL_FIELDS {
         return Err(DemoError::InvalidSnapshot("too many personal fields"));
@@ -2222,6 +2712,38 @@ fn validate_snapshot(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
     }
     if snapshot.accumulator_millis >= FIXED_STEP_MILLIS {
         return Err(DemoError::InvalidSnapshot("accumulator is out of range"));
+    }
+    Ok(())
+}
+
+fn validate_snapshot_execution(snapshot: &DemoSnapshot) -> Result<(), DemoError> {
+    if !valid_execution_settings(snapshot.execution_settings) {
+        return Err(DemoError::InvalidSnapshot(
+            "execution setting is outside the accepted range",
+        ));
+    }
+    if let Some(field) = snapshot.navigation_field {
+        let direction_length = Vec3::new(field.direction_x, field.direction_y, 0.0).length();
+        if !valid_field_position(field.x, field.y)
+            || !field.direction_x.is_finite()
+            || !field.direction_y.is_finite()
+            || (direction_length - 1.0).abs() > 0.000_1
+            || !valid_range(
+                field.radius,
+                MIN_NAVIGATION_FIELD_RADIUS,
+                MAX_NAVIGATION_FIELD_RADIUS,
+            )
+            || !valid_range(field.strength, 0.0, MAX_NAVIGATION_FIELD_STRENGTH)
+        {
+            return Err(DemoError::InvalidSnapshot("invalid navigation field"));
+        }
+    }
+    if snapshot.execution_settings.collision_policy == CollisionPolicy::CollisionFree
+        && count_overlaps(&snapshot.particles.particles) > 0
+    {
+        return Err(DemoError::InvalidSnapshot(
+            "collision-free snapshot contains overlapping discs",
+        ));
     }
     Ok(())
 }
@@ -2356,8 +2878,8 @@ fn integrate_particle(
     let mut velocity = particle.velocity + acceleration * FIXED_STEP_SECONDS;
     velocity = normalized_or(velocity, particle.velocity) * target_speed;
     let mut position = particle.position + velocity * FIXED_STEP_SECONDS;
-    contain_axis(&mut position.x, &mut velocity.x);
-    contain_axis(&mut position.y, &mut velocity.y);
+    contain_axis(&mut position.x, &mut velocity.x, particle.radius);
+    contain_axis(&mut position.y, &mut velocity.y, particle.radius);
     position.z = 0.0;
     velocity.z = 0.0;
     (position, velocity)
@@ -2404,12 +2926,28 @@ fn normalized_or(value: Vec3, fallback: Vec3) -> Vec3 {
     }
 }
 
-fn contain_axis(position: &mut f32, velocity: &mut f32) {
-    if *position < -WORLD_LIMIT {
-        *position = -WORLD_LIMIT;
+fn contain_particle(particle: &mut ParticleState) {
+    contain_axis(
+        &mut particle.position.x,
+        &mut particle.velocity.x,
+        particle.radius,
+    );
+    contain_axis(
+        &mut particle.position.y,
+        &mut particle.velocity.y,
+        particle.radius,
+    );
+    particle.position.z = 0.0;
+    particle.velocity.z = 0.0;
+}
+
+fn contain_axis(position: &mut f32, velocity: &mut f32, radius: f32) {
+    let limit = WORLD_LIMIT - radius;
+    if *position < -limit {
+        *position = -limit;
         *velocity = velocity.abs();
-    } else if *position > WORLD_LIMIT {
-        *position = WORLD_LIMIT;
+    } else if *position > limit {
+        *position = limit;
         *velocity = -velocity.abs();
     }
 }

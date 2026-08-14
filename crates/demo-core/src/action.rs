@@ -97,6 +97,68 @@ pub struct ResolvedDynamics {
     pub jitter: f32,
 }
 
+/// Whether the deterministic core permits temporary disc overlap.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CollisionPolicy {
+    /// Use steering-only avoidance; overlaps remain observable and are not corrected.
+    SoftAvoidance,
+    /// Combine anticipatory steering with deterministic non-overlap projection.
+    CollisionFree,
+}
+
+/// Explicit app-owned kinematic and clearance controls consumed by the one core path.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExecutionSettings {
+    /// Current overlap policy.
+    pub collision_policy: CollisionPolicy,
+    /// Multiplier applied to local separation steering.
+    pub separation_weight: f32,
+    /// Centre-to-centre range within which separation steering is active.
+    pub separation_radius: f32,
+    /// Maximum target speed in world units per second.
+    pub speed_limit: f32,
+    /// Maximum steering acceleration in world units per second squared.
+    pub acceleration_limit: f32,
+    /// Strength of steering back from the soft world boundary.
+    pub boundary_strength: f32,
+}
+
+/// Pairwise clearance observations and deterministic intervention counters.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ClearanceMetrics {
+    /// Smallest signed edge-to-edge distance between any two rendered discs.
+    pub minimum_surface_clearance: f32,
+    /// Pairs whose rendered discs currently overlap.
+    pub overlap_pair_count: usize,
+    /// Non-overlapping pairs within the documented near-miss margin.
+    pub near_miss_pair_count: usize,
+    /// Pair corrections applied during the most recent fixed step.
+    pub last_step_intervention_count: u64,
+    /// Pair corrections applied since the current scene was created or reset.
+    pub total_intervention_count: u64,
+    /// Fixed steps whose tentative integration produced at least one overlap.
+    pub contact_tick_count: u64,
+}
+
+/// One app-owned directional navigation region.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct NavigationFieldSummary {
+    /// Horizontal centre in normalized scene coordinates.
+    pub x: f32,
+    /// Vertical centre in normalized scene coordinates.
+    pub y: f32,
+    /// Canonical unit horizontal direction.
+    pub direction_x: f32,
+    /// Canonical unit vertical direction.
+    pub direction_y: f32,
+    /// Circular influence radius in world units.
+    pub radius: f32,
+    /// Maximum acceleration contributed by the field.
+    pub strength: f32,
+}
+
 /// Direction of one app-local synthetic personal field.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -189,6 +251,53 @@ pub enum SemanticAction {
         /// Bounded transitions per member-second.
         rate: f32,
     },
+    /// Choose whether disc overlap is merely measured or deterministically prevented.
+    SetCollisionPolicy {
+        /// Explicit overlap policy.
+        policy: CollisionPolicy,
+    },
+    /// Set the multiplier for local separation steering.
+    SetSeparationWeight {
+        /// Bounded app-owned multiplier.
+        value: f32,
+    },
+    /// Set the actual centre-to-centre separation steering radius.
+    SetSeparationRadius {
+        /// Bounded radius in world units.
+        value: f32,
+    },
+    /// Set the maximum target speed.
+    SetSpeedLimit {
+        /// Bounded world units per second.
+        value: f32,
+    },
+    /// Set the maximum steering acceleration.
+    SetAccelerationLimit {
+        /// Bounded world units per second squared.
+        value: f32,
+    },
+    /// Set soft-boundary steering strength.
+    SetBoundaryStrength {
+        /// Bounded app-owned gain.
+        value: f32,
+    },
+    /// Install or replace one bounded directional navigation region.
+    SetNavigationField {
+        /// Horizontal centre in normalized scene coordinates.
+        x: f32,
+        /// Vertical centre in normalized scene coordinates.
+        y: f32,
+        /// Horizontal direction component; normalized on acceptance.
+        direction_x: f32,
+        /// Vertical direction component; normalized on acceptance.
+        direction_y: f32,
+        /// Circular influence radius.
+        radius: f32,
+        /// Maximum acceleration contributed by the region.
+        strength: f32,
+    },
+    /// Remove the directional navigation region while preserving unrelated state.
+    ClearNavigationField,
     /// Set the bounded semantic Space quality and resolve the complete raw vector.
     SetSpaceQuality {
         /// Indirect (0) to Direct (1).
@@ -379,6 +488,33 @@ enum SemanticActionWire {
     SetSeparation {
         rate: f32,
     },
+    SetCollisionPolicy {
+        policy: CollisionPolicy,
+    },
+    SetSeparationWeight {
+        value: f32,
+    },
+    SetSeparationRadius {
+        value: f32,
+    },
+    SetSpeedLimit {
+        value: f32,
+    },
+    SetAccelerationLimit {
+        value: f32,
+    },
+    SetBoundaryStrength {
+        value: f32,
+    },
+    SetNavigationField {
+        x: f32,
+        y: f32,
+        direction_x: f32,
+        direction_y: f32,
+        radius: f32,
+        strength: f32,
+    },
+    ClearNavigationField {},
     SetSpaceQuality {
         value: f32,
     },
@@ -497,6 +633,38 @@ impl<'de> Deserialize<'de> for SemanticAction {
             SemanticActionWire::SetAlignment { rate } => Self::SetAlignment { rate },
             SemanticActionWire::SetCohesion { rate } => Self::SetCohesion { rate },
             SemanticActionWire::SetSeparation { rate } => Self::SetSeparation { rate },
+            SemanticActionWire::SetCollisionPolicy { policy } => {
+                Self::SetCollisionPolicy { policy }
+            }
+            SemanticActionWire::SetSeparationWeight { value } => {
+                Self::SetSeparationWeight { value }
+            }
+            SemanticActionWire::SetSeparationRadius { value } => {
+                Self::SetSeparationRadius { value }
+            }
+            SemanticActionWire::SetSpeedLimit { value } => Self::SetSpeedLimit { value },
+            SemanticActionWire::SetAccelerationLimit { value } => {
+                Self::SetAccelerationLimit { value }
+            }
+            SemanticActionWire::SetBoundaryStrength { value } => {
+                Self::SetBoundaryStrength { value }
+            }
+            SemanticActionWire::SetNavigationField {
+                x,
+                y,
+                direction_x,
+                direction_y,
+                radius,
+                strength,
+            } => Self::SetNavigationField {
+                x,
+                y,
+                direction_x,
+                direction_y,
+                radius,
+                strength,
+            },
+            SemanticActionWire::ClearNavigationField {} => Self::ClearNavigationField,
             SemanticActionWire::SetSpaceQuality { value } => Self::SetSpaceQuality { value },
             SemanticActionWire::SetTimeQuality { value } => Self::SetTimeQuality { value },
             SemanticActionWire::SetWeightQuality { value } => Self::SetWeightQuality { value },
@@ -637,6 +805,22 @@ pub enum ActionCode {
     CohesionSet,
     /// Swarm-wide separation-mode entry rate changed.
     SeparationSet,
+    /// Collision policy changed.
+    CollisionPolicySet,
+    /// Local separation steering weight changed.
+    SeparationWeightSet,
+    /// Local separation steering radius changed.
+    SeparationRadiusSet,
+    /// Maximum target speed changed.
+    SpeedLimitSet,
+    /// Maximum steering acceleration changed.
+    AccelerationLimitSet,
+    /// Soft-boundary steering strength changed.
+    BoundaryStrengthSet,
+    /// One directional navigation region was installed or replaced.
+    NavigationFieldSet,
+    /// The directional navigation region was removed.
+    NavigationFieldCleared,
     /// Semantic Space quality changed and resolved into the raw vector.
     SpaceQualitySet,
     /// Semantic Time quality changed and resolved into the raw vector.
@@ -693,6 +877,10 @@ pub enum ActionCode {
     InvalidSpeedDelta,
     /// A raw dynamics rate was non-finite or outside its explicit range.
     InvalidDynamicsRate,
+    /// A kinematic or clearance control was non-finite or outside its explicit range.
+    InvalidExecutionSetting,
+    /// A navigation-field component was non-finite, degenerate, or out of range.
+    InvalidNavigationField,
     /// A semantic quality was non-finite or outside the normalized range.
     InvalidSemanticQuality,
     /// The operation was prepared against an older morphology state.
@@ -880,6 +1068,12 @@ pub struct PublicState {
     pub semantic_qualities: SemanticQualities,
     /// Complete effective vector consumed by deterministic stepping.
     pub resolved_dynamics: ResolvedDynamics,
+    /// App-owned kinematic and clearance controls used by deterministic stepping.
+    pub execution_settings: ExecutionSettings,
+    /// Current pairwise clearance observations and intervention counters.
+    pub clearance_metrics: ClearanceMetrics,
+    /// Active directional navigation region, if any.
+    pub navigation_field: Option<NavigationFieldSummary>,
     /// Canonical morphology groups in stable identifier order.
     pub groups: Vec<GroupSummary>,
     /// Monotonic revision fencing split, merge, and rescale operations.
