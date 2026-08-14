@@ -1,12 +1,12 @@
 {
   "schema": "combinatorial.swarmability.public.catalog.v1",
-  "export_version": "2026-08-13.7",
+  "export_version": "2026-08-14.1",
   "source_binding": {
     "authority": "research-memory",
     "sha256": "238c1667da184e8a3d5b7ae783bcdd0d1205ed0c64b0e7b4ec3467438fdac7e0",
     "row_count": 26,
     "schema_sha256": "393344ead11abeaba854a80f08abc484c4f8ce6d983d5a4d058abca6b4e180a9",
-    "profile_sha256": "d5fdafc1eb0e2386a7cd59fdd0e3e3cd4e14e9e973131e1577e5a37b0f30e4e9"
+    "profile_sha256": "1c4720595eaddf39c13c37e2ebd209c89cff0f63b43dc124e33b6c4548f58058"
   },
   "items": [
     {
@@ -152,6 +152,81 @@
         ],
         "evidence_statuses": [
           "implemented-demonstration"
+        ]
+      }
+    },
+    {
+      "public_id": "navigation-field",
+      "display_order": 80,
+      "title": "Draw a navigation field",
+      "source": {
+        "source_id": "cs-source-patil-et-al-2011-navigation-fields",
+        "system_or_study": "Navigation fields",
+        "year": 2011,
+        "paper_url": "https://doi.org/10.1109/TVCG.2010.33",
+        "project_url": null,
+        "artifact_url": null,
+        "source_locus": "original author-hosted full text",
+        "evidence_kind": "technical-demonstration",
+        "literature_status": "described-technical-mechanism",
+        "catalog_projection_status": "verified-projection",
+        "checked_on": "2026-07-25"
+      },
+      "reported": {
+        "input_expression": "sketch or import spatial guidance",
+        "input_routes": "authoring tool; exact physical device is not the research variable",
+        "user_action": "draw desired flow directions over a region",
+        "semantic_action": "set persistent spatial navigation field",
+        "control_family": "exogenous-environment-or-field",
+        "controlled_quantity": "crowd flow direction and spatial guidance",
+        "parameter_exposure": "direct-semantic",
+        "target_scope": "spatial field",
+        "temporal_mode": "persistent runtime",
+        "human_configuration": "single-user",
+        "multi_user_combination": "no multi-user combination",
+        "substrate": "digital"
+      },
+      "reconstruction": {
+        "status": "implemented-reconstruction",
+        "summary": "Reconstruct one bounded directional navigation region while retaining autonomous local swarm behavior and an independently visible collision policy.",
+        "interaction": "paint arrows or vector strokes onto the floor plane",
+        "effect": "agents follow the authored flow while retaining local collision avoidance",
+        "semantic_actions": [
+          "set_navigation_field",
+          "clear_navigation_field",
+          "set_collision_policy",
+          "set_separation_weight",
+          "set_separation_radius"
+        ],
+        "transfer_boundary": "single-user crowd authoring; no evaluated field fusion weighting leases or shared-swarm experience",
+        "does_not_claim": "This app-owned 2D field and rendered-disc clearance policy do not reproduce the source planner, crowd model, tracking stack, interface, physical robots, or human study; they do not establish multi-user field arbitration or real-world safety."
+      },
+      "facets": {
+        "input_routes": [
+          "sketch",
+          "pointer",
+          "keyboard",
+          "replay"
+        ],
+        "control_families": [
+          "exogenous-environment-or-field"
+        ],
+        "scopes": [
+          "field",
+          "swarm"
+        ],
+        "temporal_modes": [
+          "persistent",
+          "continuous"
+        ],
+        "multi_user_policies": [
+          "single-user"
+        ],
+        "substrates": [
+          "digital"
+        ],
+        "evidence_statuses": [
+          "described-technical-mechanism"
         ]
       }
     },

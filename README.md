@@ -20,6 +20,19 @@ by raw controls—there is no second simulation path. The browser shows both the
 semantic values and every resolved parameter. This reconstructs reported
 relationships from a perception study of pre-rendered clips; it is not the
 authors' runtime, live body control, or a validated universal Laban interpreter.
+Collision and clearance are explicit execution concerns rather than implied
+properties of the visual. The default collision-free policy combines
+anticipatory steering with deterministic rendered-disc non-overlap projection;
+an alternative soft policy permits and measures overlap. Local separation
+weight/radius, speed and acceleration limits, and boundary response have honest
+bounds. The DOM shows minimum signed surface clearance, overlap and near-miss
+counts, tentative-contact ticks, and intervention counts. These are digital
+fixed-step guarantees, not rigid-body dynamics or evidence of physical-robot
+safety.
+One bounded directional navigation region can steer members inside a circular
+area while the same local behavior and collision policy remain active. This
+reconstructs the cited separation between authored spatial guidance and local
+navigation, not the authors' planner, interface, crowd model, or evaluation.
 Canonical morphology groups are separate from target scope. A split applies a
 fixed alternating-member-ID partition, a merge retains the lower participating
 group ID, and each group has an independently bounded 0.50–2.00 formation-scale
@@ -53,6 +66,10 @@ action/policy/receipt trace, field or lease provenance, same-tick measures, and
 Lane B minus Lane A deltas. These are deterministic reconstruction outcomes, not
 research results or evidence of live multi-user behavior. Entering and exiting
 comparison mode does not mutate the ordinary atlas engine.
+A third profile feeds the same navigation field, whole-swarm pace request,
+seed, and fixed-step tape to a soft-overlap lane and a collision-free lane, so
+clearance and intervention consequences can be inspected without changing the
+underlying swarm reducer.
 
 This is a reconstruction and research instrument, not an implementation by the
 authors of any cited work and not a universal interaction vocabulary. Its

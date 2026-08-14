@@ -11,7 +11,7 @@ composition or activation decision exists.
 
 ## Scope
 
-The atlas shell exposes seven allowlisted interaction mappings and their exact
+The atlas shell exposes eight allowlisted interaction mappings and their exact
 evidence and transfer boundaries. Implemented mechanisms demonstrate
 target-independent collective steering and speed actions over three scopes:
 one selected member, a selected subgroup, or the whole swarm. `Flock`
@@ -21,6 +21,22 @@ Additive personal fields separately demonstrate app-local synthetic
 contributor provenance, attract/repel polarity, persistent/expiring lifetime,
 and order-independent superposition. Synthetic contributors are not accounts,
 people, durable identity, or live multi-user authority.
+Disc execution is an explicit app-owned policy on the same simulation path.
+`soft_avoidance` retains steering-only avoidance and makes rendered-disc
+overlap observable. `collision_free` is the default and adds relative-velocity
+look-ahead plus canonical pair-order, fixed-iteration non-overlap projection
+after ordinary integration. It removes approaching normal velocity at corrected
+contacts and contains particle centres by their actual radii. This is a
+rendered-disc clearance guarantee at fixed-step boundaries, not rigid-body
+contact physics or a physical-robot safety certificate. Local separation weight
+and radius, speed limit, acceleration limit, and soft-boundary response are
+explicit bounded controls. The older raw `separation` rate is consistently
+labelled as the rate of entering the `Disperse` mode.
+One directional navigation region reconstructs the source separation between
+spatial flow guidance and autonomous local navigation. It contributes bounded
+acceleration inside a circular region while member behavior, personal fields,
+morphology, and collision policy remain independently active. The field is an
+app-owned 2D reconstruction, not the source planner or crowd implementation.
 Raw dynamics controls expose three swarm-wide rates for entering the existing
 Flock, Cohere, and Disperse modes. Each rate is bounded to 0.00–1.00 transition
 per member-second and defaults to 0.00, so this mechanism does not alter the
@@ -50,7 +66,7 @@ holder release is explicit, and fixed-step expiry is deterministic. Handoff is
 a two-action offer plus named-receiver accept/decline; acceptance changes only
 the holder and preserves the original expiry. One holder-gated behavior action
 makes authority consequences visible without reusing target-scope policy.
-Comparison mode is atlas-wide infrastructure rather than an eighth literature
+Comparison mode is atlas-wide infrastructure rather than a separate literature
 entry. A strict immutable comparison specification binds one canonical decimal
 seed, equal left/right seed copies, one scenario ID, and the exact versioned
 normalized-input tape ID. The runner clones one canonical `DemoCore` into two
@@ -67,6 +83,12 @@ maps the same two normalized synthetic influence requests either into two
 order-stable additive fields or an exclusive lease where the second operator's
 request and use fail closed. All profiles continue through the same reducer and
 simulation path.
+The clearance profile applies the same seed, rightward navigation region,
+whole-swarm pace request, and fixed-step tape to both lanes. Only the named
+collision policy differs: Lane A permits and measures soft-overlap outcomes;
+Lane B applies predictive steering and deterministic non-overlap projection.
+Minimum signed surface clearance, overlaps, near misses, contact ticks, and
+projection interventions remain inspectable beside the established metrics.
 
 ## Non-scope
 
@@ -303,10 +325,15 @@ actions and payloads, not DOM or Canvas code.
 | A metric delta looks like a research finding | Every table and result receipt labels it as an app-owned deterministic reconstruction outcome |
 | Comparison rewrites literature evidence | Each lane cites an unchanged accepted catalogue row with its own status, transfer boundary, and non-claim |
 | Comparison corrupts the ordinary atlas | A separate Wasm owner freezes ordinary animation and byte-checks ordinary state and frame rows on exit |
+| “Separation” hides two different mechanisms | UI and documentation name raw mode entry as `Enter Disperse rate`; local separation has explicit weight and radius |
+| Steering alone is mistaken for a no-collision guarantee | Soft and collision-free policies are explicit; signed surface clearance and overlaps remain visible |
+| Collision correction becomes a second physics engine | Predictive steering and deterministic projection are stages of the one app-owned fixed-step path |
+| A digital guarantee is transferred to robots | UI, catalogue, and docs limit the claim to rendered-disc non-overlap at fixed-step boundaries |
+| A navigation field overrides local behavior invisibly | Field state, direction, radius, strength, action receipt, and independent collision policy are projected to DOM state |
 
 ## Next slice
 
-The planned seven-entry atlas and comparison tranche is complete. Input-device
+The planned eight-entry atlas, collision/clearance hardening, and comparison tranche are complete. Input-device
 adapters, Pages deployment, LSL, Optics integration, live multi-user authority,
 and Quest adaptation remain separate later decisions and are not activated by
 this architecture.

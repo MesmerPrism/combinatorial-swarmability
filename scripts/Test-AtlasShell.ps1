@@ -27,7 +27,19 @@ $requiredIds = @(
     'field-lifetime', 'field-x', 'field-y', 'field-select',
     'place-field-button', 'move-field-button', 'polarity-field-button',
     'remove-field-button', 'state-dynamics-mode', 'state-dynamics-rates',
-    'state-semantic-qualities', 'metric-distribution',
+    'state-semantic-qualities', 'metric-distribution', 'state-collision-policy',
+    'state-navigation-field', 'metric-min-clearance', 'metric-overlaps',
+    'metric-near-misses', 'metric-latest-interventions', 'metric-total-interventions',
+    'metric-contact-ticks', 'execution-controls', 'execution-policy',
+    'execution-separation-weight', 'execution-separation-weight-value',
+    'execution-separation-radius', 'execution-separation-radius-value',
+    'execution-speed-limit', 'execution-speed-limit-value',
+    'execution-acceleration-limit', 'execution-acceleration-limit-value',
+    'execution-boundary-strength', 'execution-boundary-strength-value',
+    'navigation-x', 'navigation-x-value', 'navigation-y', 'navigation-y-value',
+    'navigation-direction', 'navigation-direction-value', 'navigation-radius',
+    'navigation-radius-value', 'navigation-strength', 'navigation-strength-value',
+    'apply-navigation-button', 'clear-navigation-button',
     'dynamics-alignment', 'dynamics-alignment-value', 'dynamics-cohesion',
     'dynamics-cohesion-value', 'dynamics-separation', 'dynamics-separation-value',
     'dynamics-flow-title', 'flow-alignment-rate', 'flow-cohesion-rate',
@@ -123,7 +135,11 @@ foreach ($functionName in @(
     'pauseComparison', 'stepComparisonEvent', 'resetComparison',
     'replayComparison', 'refreshComparison', 'renderComparisonInvariants',
     'renderComparisonLane', 'renderComparisonEvidence', 'renderComparisonPolicyState',
-    'renderComparisonTrace', 'renderComparisonMetrics', 'drawComparisonLane'
+    'renderComparisonTrace', 'renderComparisonMetrics', 'drawComparisonLane',
+    'bindExecutionSlider', 'updateExecutionControls', 'updateExecutionOutput',
+    'updateNavigationOutputs', 'applyNavigationField', 'clearNavigationField',
+    'drawNavigationField', 'drawClearanceWarnings', 'drawComparisonNavigation',
+    'drawComparisonClearance'
 )) {
     if ($script -notmatch "function\s+$functionName\s*\(") {
         throw "Atlas adapter is missing $functionName."
@@ -133,6 +149,7 @@ foreach ($comparisonContract in @(
     'combinatorial.swarmability.comparison-spec.v1',
     'combinatorial.swarmability.normalized-input-tape.v1',
     'raw_semantic_equivalent', 'raw_semantic_contrast', 'superposition_lease',
+    'soft_collision_free', 'soft-collision-free.v1',
     'new ComparisonEngine(specJson)', 'ordinaryStateBeforeComparison = engine.state_json()',
     'ordinaryRowsBeforeComparison = Array.from(engine.frame_rows())'
 )) {
@@ -169,6 +186,30 @@ foreach ($dynamicsAction in @('set_alignment', 'set_cohesion', 'set_separation')
     if ($script -notmatch [regex]::Escape($dynamicsAction)) {
         throw "The accessible raw dynamics adapter is missing semantic action: $dynamicsAction"
     }
+}
+foreach ($executionAction in @(
+    'set_collision_policy', 'set_separation_weight', 'set_separation_radius',
+    'set_speed_limit', 'set_acceleration_limit', 'set_boundary_strength',
+    'set_navigation_field', 'clear_navigation_field'
+)) {
+    if ($script -notmatch [regex]::Escape($executionAction)) {
+        throw "The accessible collision/navigation adapter is missing semantic action: $executionAction"
+    }
+}
+foreach ($executionRange in @(
+    @{ Id = 'execution-separation-weight'; Min = '0'; Max = '3'; Step = '0\.05'; Value = '1' },
+    @{ Id = 'execution-separation-radius'; Min = '0\.08'; Max = '0\.3'; Step = '0\.01'; Value = '0\.13' },
+    @{ Id = 'execution-speed-limit'; Min = '0\.2'; Max = '1\.5'; Step = '0\.05'; Value = '1\.1' },
+    @{ Id = 'execution-acceleration-limit'; Min = '0\.5'; Max = '12'; Step = '0\.5'; Value = '8' },
+    @{ Id = 'execution-boundary-strength'; Min = '0'; Max = '12'; Step = '0\.5'; Value = '6' }
+)) {
+    $pattern = "id=[`"']$($executionRange.Id)[`"'][^>]*min=[`"']$($executionRange.Min)[`"'][^>]*max=[`"']$($executionRange.Max)[`"'][^>]*step=[`"']$($executionRange.Step)[`"'][^>]*value=[`"']$($executionRange.Value)[`"']"
+    if ($html -notmatch $pattern) {
+        throw "Execution slider $($executionRange.Id) differs from the accepted core range/default."
+    }
+}
+if ($html -notmatch 'Enter Disperse rate' -or $html -match '>Separation / enter Disperse') {
+    throw 'The transition control must not be confused with the local separation weight/radius.'
 }
 foreach ($semanticAction in @('set_space_quality', 'set_time_quality', 'set_weight_quality', 'set_flow_quality')) {
     if ($script -notmatch [regex]::Escape($semanticAction)) {
@@ -230,6 +271,7 @@ $implementedIds = @($implemented.public_id | Sort-Object)
 $expectedImplementedIds = @(
     'additive-personal-fields',
     'lease-expiry-and-handoff',
+    'navigation-field',
     'raw-dynamics-parameters',
     'save-retrieve-reset-replay',
     'scope-and-granularity',
@@ -249,4 +291,4 @@ foreach ($item in @($catalog.items)) {
     }
 }
 
-Write-Host 'Atlas shell contract passed: seven facets and reconstructions, independent evidence cards, action provenance, metrics, and isolated comparison mode.'
+Write-Host 'Atlas shell contract passed: seven filter facets, eight reconstructions, clearance/navigation provenance and metrics, and isolated comparison mode.'

@@ -1,4 +1,4 @@
-import init, { ComparisonEngine, DemoEngine } from "./pkg/demo_wasm.js?v=comparison-v1";
+import init, { ComparisonEngine, DemoEngine } from "./pkg/demo_wasm.js?v=clearance-v1";
 
 const DEFAULT_SEED = "2026";
 const SPEED_DELTA = 0.10;
@@ -16,6 +16,7 @@ const COMPARISON_SCENARIOS = {
   raw_semantic_equivalent: "raw-semantic-midpoint.v1",
   raw_semantic_contrast: "raw-semantic-contrast.v1",
   superposition_lease: "superposition-lease.v1",
+  soft_collision_free: "soft-collision-free.v1",
 };
 const CONTRIBUTOR_LABELS = ["A", "B", "C", "D"];
 const OPERATOR_LABELS = ["A", "B", "C", "D"];
@@ -41,6 +42,17 @@ const fieldSelect = document.querySelector("#field-select");
 const dynamicsAlignment = document.querySelector("#dynamics-alignment");
 const dynamicsCohesion = document.querySelector("#dynamics-cohesion");
 const dynamicsSeparation = document.querySelector("#dynamics-separation");
+const executionPolicy = document.querySelector("#execution-policy");
+const executionSeparationWeight = document.querySelector("#execution-separation-weight");
+const executionSeparationRadius = document.querySelector("#execution-separation-radius");
+const executionSpeedLimit = document.querySelector("#execution-speed-limit");
+const executionAccelerationLimit = document.querySelector("#execution-acceleration-limit");
+const executionBoundaryStrength = document.querySelector("#execution-boundary-strength");
+const navigationX = document.querySelector("#navigation-x");
+const navigationY = document.querySelector("#navigation-y");
+const navigationDirection = document.querySelector("#navigation-direction");
+const navigationRadius = document.querySelector("#navigation-radius");
+const navigationStrength = document.querySelector("#navigation-strength");
 const semanticSpace = document.querySelector("#semantic-space");
 const semanticTime = document.querySelector("#semantic-time");
 const semanticWeight = document.querySelector("#semantic-weight");
@@ -88,7 +100,7 @@ let ordinaryStateBeforeComparison = "";
 let ordinaryRowsBeforeComparison = [];
 
 await init({
-  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=comparison-v1", import.meta.url),
+  module_or_path: new URL("./pkg/demo_wasm_bg.wasm?v=clearance-v1", import.meta.url),
 });
 engine = new DemoEngine(DEFAULT_SEED);
 rowWidth = DemoEngine.frame_row_width();
@@ -214,6 +226,33 @@ function bindControls() {
   bindDynamicsSlider(dynamicsAlignment, "set_alignment", "alignment");
   bindDynamicsSlider(dynamicsCohesion, "set_cohesion", "cohesion");
   bindDynamicsSlider(dynamicsSeparation, "set_separation", "separation");
+  executionPolicy.addEventListener("change", (event) => {
+    dispatch(
+      { type: "set_collision_policy", policy: executionPolicy.value },
+      interactionTrace(
+        event,
+        `execution.collision-policy(${executionPolicy.value})`,
+        "Whole-scene app-owned collision policy; steering core and input route remain unchanged"
+      )
+    );
+  });
+  bindExecutionSlider(executionSeparationWeight, "set_separation_weight", "separation-weight");
+  bindExecutionSlider(executionSeparationRadius, "set_separation_radius", "separation-radius");
+  bindExecutionSlider(executionSpeedLimit, "set_speed_limit", "speed-limit");
+  bindExecutionSlider(executionAccelerationLimit, "set_acceleration_limit", "acceleration-limit");
+  bindExecutionSlider(executionBoundaryStrength, "set_boundary_strength", "boundary-strength");
+  [navigationX, navigationY, navigationDirection, navigationRadius, navigationStrength]
+    .forEach((slider) => {
+      slider.addEventListener("input", updateNavigationOutputs);
+      slider.addEventListener("pointerdown", (event) => {
+        slider.dataset.inputRoute = event.pointerType || "pointer";
+      });
+      slider.addEventListener("keydown", () => {
+        slider.dataset.inputRoute = "keyboard-or-switch";
+      });
+    });
+  document.querySelector("#apply-navigation-button").addEventListener("click", applyNavigationField);
+  document.querySelector("#clear-navigation-button").addEventListener("click", clearNavigationField);
   bindSemanticSlider(semanticSpace, "set_space_quality", "space");
   bindSemanticSlider(semanticTime, "set_time_quality", "time");
   bindSemanticSlider(semanticWeight, "set_weight_quality", "weight");
@@ -344,6 +383,91 @@ function bindSemanticSlider(slider, actionType, quality) {
     );
     delete slider.dataset.inputRoute;
   });
+}
+
+function bindExecutionSlider(slider, actionType, setting) {
+  slider.addEventListener("pointerdown", (event) => {
+    slider.dataset.inputRoute = event.pointerType || "pointer";
+  });
+  slider.addEventListener("keydown", () => {
+    slider.dataset.inputRoute = "keyboard-or-switch";
+  });
+  slider.addEventListener("input", () => {
+    updateExecutionOutput(setting, Number(slider.value));
+  });
+  slider.addEventListener("change", () => {
+    const value = Number(slider.value);
+    dispatch(
+      { type: actionType, value },
+      {
+        inputRoute: slider.dataset.inputRoute || "synthetic-slider",
+        normalizedInput: `execution.${setting}(${value.toFixed(2)})`,
+        policy: "Whole-scene app-owned kinematic or clearance setting; same deterministic simulation path",
+      }
+    );
+    delete slider.dataset.inputRoute;
+  });
+}
+
+function updateExecutionOutput(setting, value) {
+  document.querySelector(`#execution-${setting}-value`).textContent = value.toFixed(2);
+}
+
+function updateExecutionControls() {
+  const settings = state.execution_settings;
+  executionPolicy.value = settings.collision_policy;
+  const controlsBySetting = {
+    "separation-weight": [executionSeparationWeight, settings.separation_weight],
+    "separation-radius": [executionSeparationRadius, settings.separation_radius],
+    "speed-limit": [executionSpeedLimit, settings.speed_limit],
+    "acceleration-limit": [executionAccelerationLimit, settings.acceleration_limit],
+    "boundary-strength": [executionBoundaryStrength, settings.boundary_strength],
+  };
+  Object.entries(controlsBySetting).forEach(([setting, [slider, value]]) => {
+    slider.value = String(value);
+    updateExecutionOutput(setting, value);
+  });
+  document.querySelector("#clear-navigation-button").disabled = state.navigation_field === null;
+}
+
+function updateNavigationOutputs() {
+  document.querySelector("#navigation-x-value").textContent = Number(navigationX.value).toFixed(2);
+  document.querySelector("#navigation-y-value").textContent = Number(navigationY.value).toFixed(2);
+  document.querySelector("#navigation-direction-value").textContent = `${Number(navigationDirection.value)}°`;
+  document.querySelector("#navigation-radius-value").textContent = Number(navigationRadius.value).toFixed(2);
+  document.querySelector("#navigation-strength-value").textContent = Number(navigationStrength.value).toFixed(2);
+}
+
+function applyNavigationField(event) {
+  const angleDegrees = Number(navigationDirection.value);
+  const angleRadians = angleDegrees * Math.PI / 180;
+  dispatch(
+    {
+      type: "set_navigation_field",
+      x: Number(navigationX.value),
+      y: Number(navigationY.value),
+      direction_x: Math.cos(angleRadians),
+      direction_y: Math.sin(angleRadians),
+      radius: Number(navigationRadius.value),
+      strength: Number(navigationStrength.value),
+    },
+    interactionTrace(
+      event,
+      `navigation-field.apply(${angleDegrees}deg)`,
+      "Directional field affects members inside its region; local behavior and collision policy remain independently active"
+    )
+  );
+}
+
+function clearNavigationField(event) {
+  dispatch(
+    { type: "clear_navigation_field" },
+    interactionTrace(
+      event,
+      "navigation-field.clear",
+      "Navigation influence is removed; collision, dynamics, morphology, fields, and leases remain intact"
+    )
+  );
 }
 
 function interactionTrace(event, normalizedInput, policy = "") {
@@ -1438,6 +1562,14 @@ function renderComparisonPolicyState(side, laneState) {
     item.textContent = `Member ${lease.member_id + 1}: synthetic Operator ${OPERATOR_LABELS[lease.holder_operator_id]} holds the lease for ${lease.remaining_steps} more fixed steps; authority revision ${laneState.authority_revision}.`;
     fragment.append(item);
   });
+  const execution = document.createElement("li");
+  execution.textContent = `Disc execution: ${laneState.execution_settings.collision_policy === "collision_free" ? "collision-free" : "soft avoidance with overlap permitted"}; minimum surface clearance ${laneState.clearance_metrics.minimum_surface_clearance.toFixed(3)}, ${laneState.clearance_metrics.overlap_pair_count} overlapping pairs, ${laneState.clearance_metrics.total_intervention_count} deterministic corrections.`;
+  fragment.append(execution);
+  if (laneState.navigation_field !== null) {
+    const navigation = document.createElement("li");
+    navigation.textContent = `Navigation field: centre ${laneState.navigation_field.x.toFixed(2)}, ${laneState.navigation_field.y.toFixed(2)}; direction ${laneState.navigation_field.direction_x.toFixed(2)}, ${laneState.navigation_field.direction_y.toFixed(2)}; radius ${laneState.navigation_field.radius.toFixed(2)}; strength ${laneState.navigation_field.strength.toFixed(2)}.`;
+    fragment.append(navigation);
+  }
   if (fragment.childNodes.length === 0) {
     const empty = document.createElement("li");
     empty.textContent = "No active field or lease provenance in this lane.";
@@ -1515,7 +1647,7 @@ function comparisonMetricValue(metricId, metrics) {
     const values = metrics.behavior_distribution;
     return `${values.flock} / ${values.cohere} / ${values.disperse}`;
   }
-  if (["tick", "active_fields", "active_leases"].includes(metricId)) {
+  if (["tick", "active_fields", "active_leases", "overlap_pair_count", "near_miss_pair_count", "total_collision_interventions", "contact_tick_count"].includes(metricId)) {
     return String(metrics[metricId]);
   }
   return Number(metrics[metricId]).toFixed(3);
@@ -1526,7 +1658,7 @@ function comparisonMetricDelta(metricId, deltas) {
     const values = deltas.behavior_distribution;
     return `${signedInteger(values.flock)} / ${signedInteger(values.cohere)} / ${signedInteger(values.disperse)}`;
   }
-  if (["tick", "group_count", "active_fields", "active_leases"].includes(metricId)) {
+  if (["tick", "group_count", "active_fields", "active_leases", "overlap_pair_count", "near_miss_pair_count", "total_collision_interventions", "contact_tick_count"].includes(metricId)) {
     return signedInteger(deltas[metricId]);
   }
   const value = Number(deltas[metricId]);
@@ -1556,6 +1688,7 @@ function drawComparisonLane(laneCanvas, laneRows, lane) {
     laneContext.stroke();
   }
   laneContext.setLineDash([]);
+  drawComparisonNavigation(laneContext, lane.state.navigation_field, width, height);
   const projectedRows = [];
   for (let offset = 0; offset + rowWidth <= laneRows.length; offset += rowWidth) {
     projectedRows.push(laneRows.subarray(offset, offset + rowWidth));
@@ -1571,11 +1704,60 @@ function drawComparisonLane(laneCanvas, laneRows, lane) {
     laneContext.stroke();
   });
   lane.state.fields.forEach((field) => drawComparisonField(laneContext, field, width, height));
+  drawComparisonClearance(laneContext, projectedRows, width, height);
   projectedRows.forEach((row) => drawComparisonMember(laneContext, row, lane.state, width, height));
   laneCanvas.setAttribute(
     "aria-label",
-    `${lane.descriptor.label}, seed ${lane.state.seed}, tick ${lane.state.tick}: ${lane.state.behavior_counts.flock} Flock, ${lane.state.behavior_counts.cohere} Cohere, ${lane.state.behavior_counts.disperse} Disperse; ${lane.state.fields.length} fields and ${lane.state.leases.length} leases.`
+    `${lane.descriptor.label}, seed ${lane.state.seed}, tick ${lane.state.tick}: ${lane.state.behavior_counts.flock} Flock, ${lane.state.behavior_counts.cohere} Cohere, ${lane.state.behavior_counts.disperse} Disperse; ${lane.state.execution_settings.collision_policy}, minimum surface clearance ${lane.state.clearance_metrics.minimum_surface_clearance.toFixed(3)}, ${lane.state.clearance_metrics.overlap_pair_count} overlaps, ${lane.state.clearance_metrics.near_miss_pair_count} near misses, ${lane.state.clearance_metrics.total_intervention_count} collision interventions; ${lane.state.fields.length} fields and ${lane.state.leases.length} leases.`
   );
+}
+
+function drawComparisonNavigation(laneContext, field, width, height) {
+  if (field === null) {
+    return;
+  }
+  const x = ((field.x + 1) / 2) * width;
+  const y = ((1 - field.y) / 2) * height;
+  const radiusX = field.radius * width / 2;
+  const radiusY = field.radius * height / 2;
+  const length = Math.min(radiusX, radiusY) * 0.7;
+  laneContext.save();
+  laneContext.fillStyle = "#276d6518";
+  laneContext.strokeStyle = "#276d65";
+  laneContext.lineWidth = 2.5;
+  laneContext.setLineDash([8, 6]);
+  laneContext.beginPath();
+  laneContext.ellipse(x, y, radiusX, radiusY, 0, 0, Math.PI * 2);
+  laneContext.fill();
+  laneContext.stroke();
+  laneContext.setLineDash([]);
+  laneContext.beginPath();
+  laneContext.moveTo(x, y);
+  laneContext.lineTo(x + field.direction_x * length, y - field.direction_y * length);
+  laneContext.stroke();
+  laneContext.restore();
+}
+
+function drawComparisonClearance(laneContext, rowsForLane, width, height) {
+  for (let firstIndex = 0; firstIndex < rowsForLane.length; firstIndex += 1) {
+    const first = rowsForLane[firstIndex];
+    for (let secondIndex = firstIndex + 1; secondIndex < rowsForLane.length; secondIndex += 1) {
+      const second = rowsForLane[secondIndex];
+      const clearance = Math.hypot(first[1] - second[1], first[2] - second[2]) - first[3] - second[3];
+      if (clearance > 0.03) {
+        continue;
+      }
+      laneContext.save();
+      laneContext.strokeStyle = clearance < 0 ? "#8f332d" : "#8a6a24";
+      laneContext.lineWidth = clearance < 0 ? 4 : 1.5;
+      laneContext.setLineDash(clearance < 0 ? [] : [4, 5]);
+      laneContext.beginPath();
+      laneContext.moveTo(((first[1] + 1) / 2) * width, ((1 - first[2]) / 2) * height);
+      laneContext.lineTo(((second[1] + 1) / 2) * width, ((1 - second[2]) / 2) * height);
+      laneContext.stroke();
+      laneContext.restore();
+    }
+  }
 }
 
 function drawComparisonField(laneContext, field, width, height) {
@@ -1750,6 +1932,12 @@ function updateDomState(updateControls = true) {
   document.querySelector("#state-relations").textContent = String(relationTotal);
   document.querySelector("#state-field-count").textContent = `${state.fields.length} of ${MAX_PERSONAL_FIELDS}`;
   document.querySelector("#state-contributor-count").textContent = `${state.active_contributor_count} of ${CONTRIBUTOR_LABELS.length}`;
+  document.querySelector("#state-collision-policy").textContent = state.execution_settings.collision_policy === "collision_free"
+    ? "Collision-free rendered discs"
+    : "Soft avoidance; overlap permitted";
+  document.querySelector("#state-navigation-field").textContent = state.navigation_field === null
+    ? "None"
+    : `Centre ${state.navigation_field.x.toFixed(2)}, ${state.navigation_field.y.toFixed(2)} · direction ${state.navigation_field.direction_x.toFixed(2)}, ${state.navigation_field.direction_y.toFixed(2)} · radius ${state.navigation_field.radius.toFixed(2)}`;
   document.querySelector("#state-replay-events").textContent =
     `${state.replay_event_count} events / ${state.replay_step_count} steps`;
   document.querySelector("#state-checkpoint-count").textContent = `${savedCheckpoints.size} of ${MAX_CHECKPOINTS}`;
@@ -1780,6 +1968,18 @@ function updateDomState(updateControls = true) {
   document.querySelector("#metric-lease-remaining").textContent = state.leases.length === 0
     ? "None"
     : `${Math.min(...state.leases.map((lease) => lease.remaining_steps))} fixed steps`;
+  document.querySelector("#metric-min-clearance").textContent =
+    state.clearance_metrics.minimum_surface_clearance.toFixed(3);
+  document.querySelector("#metric-overlaps").textContent =
+    String(state.clearance_metrics.overlap_pair_count);
+  document.querySelector("#metric-near-misses").textContent =
+    String(state.clearance_metrics.near_miss_pair_count);
+  document.querySelector("#metric-latest-interventions").textContent =
+    String(state.clearance_metrics.last_step_intervention_count);
+  document.querySelector("#metric-total-interventions").textContent =
+    String(state.clearance_metrics.total_intervention_count);
+  document.querySelector("#metric-contact-ticks").textContent =
+    String(state.clearance_metrics.contact_tick_count);
   document.querySelector("#step-button").disabled = state.running;
   document.querySelector("#start-button").disabled = state.running;
   document.querySelector("#pause-button").disabled = !state.running;
@@ -1790,7 +1990,7 @@ function updateDomState(updateControls = true) {
   updateFieldControls();
   canvas.setAttribute(
     "aria-label",
-    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. ${dynamicsModeLabel()} resolve alignment ${state.resolved_dynamics.rates.alignment.toFixed(2)}, cohesion ${state.resolved_dynamics.rates.cohesion.toFixed(2)}, separation ${state.resolved_dynamics.rates.separation.toFixed(2)}, speed scale ${state.resolved_dynamics.speed_scale.toFixed(2)}, damping ${state.resolved_dynamics.damping.toFixed(2)}, and jitter ${state.resolved_dynamics.jitter.toFixed(2)}. ${state.fields.length} additive personal fields. ${morphologySummary(state)}. ${authoritySummary(state)}`
+    `${state.running ? "Running" : "Paused"} synthetic swarm. ${scopeLabel(state.scope)} targets ${memberList(state.target_members)}. ${behaviorMixLabel()}. ${dynamicsModeLabel()} resolve alignment ${state.resolved_dynamics.rates.alignment.toFixed(2)}, cohesion ${state.resolved_dynamics.rates.cohesion.toFixed(2)}, Disperse entry ${state.resolved_dynamics.rates.separation.toFixed(2)}, speed scale ${state.resolved_dynamics.speed_scale.toFixed(2)}, damping ${state.resolved_dynamics.damping.toFixed(2)}, and jitter ${state.resolved_dynamics.jitter.toFixed(2)}. ${state.execution_settings.collision_policy === "collision_free" ? "Collision-free disc execution" : "Soft avoidance with overlap permitted"}; minimum surface clearance ${state.clearance_metrics.minimum_surface_clearance.toFixed(3)}, ${state.clearance_metrics.overlap_pair_count} overlapping pairs, ${state.clearance_metrics.near_miss_pair_count} near misses. ${state.navigation_field === null ? "No navigation field" : "One directional navigation field"}. ${state.fields.length} additive personal fields. ${morphologySummary(state)}. ${authoritySummary(state)}`
   );
   updateMotionMode();
 
@@ -1801,6 +2001,8 @@ function updateDomState(updateControls = true) {
     }
     seedInput.value = state.seed;
     updateDynamicsControls();
+    updateExecutionControls();
+    updateNavigationOutputs();
     updateSemanticControls();
     updateMorphologyControls();
   }
@@ -2023,6 +2225,7 @@ function draw() {
   context.fillStyle = "#fbf8f2";
   context.fillRect(0, 0, width, height);
   drawFieldLines(width, height);
+  drawNavigationField(width, height);
   drawPersonalFields(width, height);
   const projectedRows = [];
   forEachRow((row) => projectedRows.push(row));
@@ -2036,7 +2239,69 @@ function draw() {
     context.restore();
   }
   drawRelations(projectedRows, width, height);
+  drawClearanceWarnings(projectedRows, width, height);
   projectedRows.forEach((row) => drawMember(row, width, height, !wholeSwarmTargeted));
+}
+
+function drawNavigationField(width, height) {
+  const field = state.navigation_field;
+  if (field === null) {
+    return;
+  }
+  const x = ((field.x + 1) / 2) * width;
+  const y = ((1 - field.y) / 2) * height;
+  const radiusX = field.radius * width / 2;
+  const radiusY = field.radius * height / 2;
+  const arrowLength = Math.min(radiusX, radiusY) * 0.72;
+  const directionX = field.direction_x;
+  const directionY = -field.direction_y;
+  const tipX = x + directionX * arrowLength;
+  const tipY = y + directionY * arrowLength;
+  const angle = Math.atan2(directionY, directionX);
+  context.save();
+  context.fillStyle = "#276d6518";
+  context.strokeStyle = "#276d65";
+  context.lineWidth = 3;
+  context.setLineDash([10, 7]);
+  context.beginPath();
+  context.ellipse(x, y, radiusX, radiusY, 0, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+  context.setLineDash([]);
+  context.beginPath();
+  context.moveTo(x, y);
+  context.lineTo(tipX, tipY);
+  context.lineTo(tipX - Math.cos(angle - Math.PI / 6) * 18, tipY - Math.sin(angle - Math.PI / 6) * 18);
+  context.moveTo(tipX, tipY);
+  context.lineTo(tipX - Math.cos(angle + Math.PI / 6) * 18, tipY - Math.sin(angle + Math.PI / 6) * 18);
+  context.stroke();
+  context.fillStyle = "#24444b";
+  context.font = "700 16px Aptos, Candara, sans-serif";
+  context.fillText("Navigation", x + 8, y - 10);
+  context.restore();
+}
+
+function drawClearanceWarnings(projectedRows, width, height) {
+  for (let firstIndex = 0; firstIndex < projectedRows.length; firstIndex += 1) {
+    const first = projectedRows[firstIndex];
+    for (let secondIndex = firstIndex + 1; secondIndex < projectedRows.length; secondIndex += 1) {
+      const second = projectedRows[secondIndex];
+      const centreDistance = Math.hypot(first[1] - second[1], first[2] - second[2]);
+      const clearance = centreDistance - first[3] - second[3];
+      if (clearance > 0.03) {
+        continue;
+      }
+      context.save();
+      context.strokeStyle = clearance < 0 ? "#8f332d" : "#8a6a24";
+      context.lineWidth = clearance < 0 ? 5 : 2;
+      context.setLineDash(clearance < 0 ? [] : [4, 5]);
+      context.beginPath();
+      context.moveTo(((first[1] + 1) / 2) * width, ((1 - first[2]) / 2) * height);
+      context.lineTo(((second[1] + 1) / 2) * width, ((1 - second[2]) / 2) * height);
+      context.stroke();
+      context.restore();
+    }
+  }
 }
 
 function drawPersonalFields(width, height) {

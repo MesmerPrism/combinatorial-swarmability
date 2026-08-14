@@ -21,6 +21,12 @@ The canvas is a visual projection, not the sole interface or state authority.
 - Four native range inputs expose Space, Time, Weight, and Flow without a
   camera, pose tracker, timed gesture, or continuous pointing requirement.
   Arrow keys and deterministic replay are equivalent synthetic routes.
+- Collision policy uses a labelled native select. Local separation weight and
+  radius, speed and acceleration limits, and boundary response use bounded
+  native ranges with keyboard arrow operation and deterministic replay.
+- The directional navigation region uses labelled native ranges for centre,
+  direction, radius, and strength plus explicit apply and clear buttons. It
+  requires no precision canvas drawing, timed gesture, or pointer device.
 - Split and merge use labelled native group selects and buttons. Formation
   scale uses a native bounded range input plus an explicit apply button. The
   deterministic replay tape is the equivalent route for exact repetition.
@@ -50,6 +56,12 @@ The canvas is a visual projection, not the sole interface or state authority.
   summary. Rule identity never depends on color alone.
 - Neighbour lines expose the local relation graph visually; the current link
   count is also presented as text.
+- Collision state never depends on color: minimum signed surface clearance,
+  overlap and near-miss counts, contact ticks, and latest/total intervention
+  counts are structured text. Supplemental canvas links distinguish overlaps
+  with solid thick geometry and near misses with thinner dashed geometry.
+- The navigation region's centre, canonical direction, radius, and strength
+  are text state; its canvas circle and arrow are supplemental.
 - Current scope, target members, collective-rule distribution, tick, seed, and
   run state are present in the DOM.
 - The input, semantic-action, policy, receipt, and quantitative traces have
@@ -103,6 +115,7 @@ inspection without state drift, focus visibility,
 reduced-motion state, intentional start, pause, single-step, reset/replay, and
 horizontal overflow. Comparison checks cover equivalent and intentionally
 different raw/semantic vectors, superposition/lease rejection provenance,
+soft-overlap/collision-free policy outcomes and navigation-field equality,
 lockstep start/pause/step/reset/replay, ordinary-atlas preservation, evidence
 cards, trace disclosure, the metrics table, mobile single-column lanes,
 forced-colors borders, and zero diagnostics.

@@ -157,7 +157,7 @@
 
       <section id="demonstration" class="demo shell" aria-labelledby="demo-title">
         <div class="section-heading">
-          <h2 id="demo-title">Interactive reconstruction: scope, fields, dynamics, morphology, leases, and history</h2>
+          <h2 id="demo-title">Interactive reconstruction: scope, fields, clearance, dynamics, morphology, leases, and history</h2>
           <p>
             Start intentionally, choose one member, the subgroup, or the whole swarm,
             then issue the same collective request through accessible browser controls.
@@ -167,6 +167,9 @@
             explicit member groups or rescale their formation target. Acquire, release,
             expire, and explicitly hand off per-member simulated authority. Save, retrieve,
             reset, and replay operate across the same deterministic core.
+            Choose steering-only overlap or collision-free rendered discs, inspect
+            surface clearance, and author one directional navigation region without
+            replacing local swarm rules.
           </p>
         </div>
 
@@ -184,7 +187,8 @@
                 A two-dimensional synthetic swarm, initially paused. Lines show local
                 neighbour relations, while member shape indicates flock, cohere, or
                 disperse. Labelled circles show synthetic contributor fields and
-                attract or repel polarity. Morphology groups have canonical numbered
+                attract or repel polarity. A labelled arrow shows the directional
+                navigation region. Morphology groups have canonical numbered
                 identities and are also listed as text. Select members with the controls below or
                 point at a member on the canvas. Equivalent state also appears as text.
               </p>
@@ -198,6 +202,7 @@
                 <span><i class="mark mark-morphology"></i> Morphology group</span>
                 <span><i class="mark mark-field-attract"></i> Attract field</span>
                 <span><i class="mark mark-field-repel"></i> Repel field</span>
+                <span><i class="mark mark-navigation"></i> Navigation field</span>
               </div>
             </div>
 
@@ -223,6 +228,8 @@
                 <div><dt>Neighbour links</dt><dd id="state-relations">0</dd></div>
                 <div><dt>Personal fields</dt><dd id="state-field-count">0 of 8</dd></div>
                 <div><dt>Synthetic contributors</dt><dd id="state-contributor-count">0 of 4</dd></div>
+                <div><dt>Disc execution</dt><dd id="state-collision-policy">Collision-free</dd></div>
+                <div><dt>Navigation field</dt><dd id="state-navigation-field">None</dd></div>
                 <div><dt>Replay tape</dt><dd id="state-replay-events">0 events / 0 steps</dd></div>
                 <div><dt>Saved checkpoints</dt><dd id="state-checkpoint-count">0 of 5</dd></div>
               </dl>
@@ -247,6 +254,12 @@
                   <div><dt>Active leases</dt><dd id="metric-leases">0</dd></div>
                   <div><dt>Pending handoffs</dt><dd id="metric-pending-handoffs">0</dd></div>
                   <div><dt>Shortest remaining lease</dt><dd id="metric-lease-remaining">None</dd></div>
+                  <div><dt>Minimum surface clearance</dt><dd id="metric-min-clearance">0.000</dd></div>
+                  <div><dt>Overlapping disc pairs</dt><dd id="metric-overlaps">0</dd></div>
+                  <div><dt>Near-miss pairs (≤ 0.03)</dt><dd id="metric-near-misses">0</dd></div>
+                  <div><dt>Latest collision interventions</dt><dd id="metric-latest-interventions">0</dd></div>
+                  <div><dt>Total collision interventions</dt><dd id="metric-total-interventions">0</dd></div>
+                  <div><dt>Tentative-contact ticks</dt><dd id="metric-contact-ticks">0</dd></div>
                 </dl>
                 <p class="metric-note">
                   Cohesion and polarization are unitless 0–1 summaries; spacing uses
@@ -455,6 +468,72 @@
               </div>
             </fieldset>
 
+            <fieldset id="execution-controls">
+              <legend>Collision, clearance, and navigation</legend>
+              <p class="control-help">
+                Collision-free execution combines predictive steering with deterministic rendered-disc projection.
+                Soft avoidance keeps the same steering core but permits and measures overlap. Neither mode is rigid-body physics.
+              </p>
+              <label class="input-label" for="execution-policy">Disc execution policy</label>
+              <select id="execution-policy" name="execution-policy">
+                <option value="collision_free">Collision-free rendered discs</option>
+                <option value="soft_avoidance">Soft avoidance; overlap permitted</option>
+              </select>
+              <div class="dynamics-control">
+                <label for="execution-separation-weight">Local separation weight <output id="execution-separation-weight-value" for="execution-separation-weight">1.00</output></label>
+                <input id="execution-separation-weight" type="range" min="0" max="3" step="0.05" value="1">
+              </div>
+              <div class="dynamics-control">
+                <label for="execution-separation-radius">Local separation radius <output id="execution-separation-radius-value" for="execution-separation-radius">0.13</output></label>
+                <input id="execution-separation-radius" type="range" min="0.08" max="0.3" step="0.01" value="0.13">
+              </div>
+              <div class="dynamics-control">
+                <label for="execution-speed-limit">Maximum target speed <output id="execution-speed-limit-value" for="execution-speed-limit">1.10</output></label>
+                <input id="execution-speed-limit" type="range" min="0.2" max="1.5" step="0.05" value="1.1">
+              </div>
+              <div class="dynamics-control">
+                <label for="execution-acceleration-limit">Maximum steering acceleration <output id="execution-acceleration-limit-value" for="execution-acceleration-limit">8.00</output></label>
+                <input id="execution-acceleration-limit" type="range" min="0.5" max="12" step="0.5" value="8">
+              </div>
+              <div class="dynamics-control">
+                <label for="execution-boundary-strength">Soft-boundary response <output id="execution-boundary-strength-value" for="execution-boundary-strength">6.00</output></label>
+                <input id="execution-boundary-strength" type="range" min="0" max="12" step="0.5" value="6">
+              </div>
+              <p class="control-help evidence-boundary">
+                These exact bounds and gains are app-owned. “Collision-free” means non-overlapping rendered discs after each fixed step,
+                not physical contact dynamics, robot footprint certification, or guaranteed real-world safety.
+              </p>
+              <h4>Directional navigation region</h4>
+              <p class="control-help">
+                All members inside the circular region receive the same directional acceleration while local behavior and collision policy remain active.
+              </p>
+              <div class="field-grid navigation-grid">
+                <label for="navigation-x">Centre X</label>
+                <input id="navigation-x" type="range" min="-0.9" max="0.9" step="0.05" value="0">
+                <output id="navigation-x-value" for="navigation-x">0.00</output>
+                <label for="navigation-y">Centre Y</label>
+                <input id="navigation-y" type="range" min="-0.9" max="0.9" step="0.05" value="0">
+                <output id="navigation-y-value" for="navigation-y">0.00</output>
+                <label for="navigation-direction">Direction</label>
+                <input id="navigation-direction" type="range" min="-180" max="180" step="15" value="0">
+                <output id="navigation-direction-value" for="navigation-direction">0°</output>
+                <label for="navigation-radius">Region radius</label>
+                <input id="navigation-radius" type="range" min="0.1" max="1.2" step="0.05" value="0.75">
+                <output id="navigation-radius-value" for="navigation-radius">0.75</output>
+                <label for="navigation-strength">Field strength</label>
+                <input id="navigation-strength" type="range" min="0" max="3" step="0.1" value="1.5">
+                <output id="navigation-strength-value" for="navigation-strength">1.50</output>
+              </div>
+              <div class="button-row field-buttons">
+                <button id="apply-navigation-button" type="button">Apply navigation field</button>
+                <button id="clear-navigation-button" type="button" disabled>Clear navigation field</button>
+              </div>
+              <p class="control-help evidence-boundary">
+                Reconstruction boundary: the cited navigation-field work separates global flow guidance from autonomous local collision avoidance.
+                This app-owned 2D region does not reproduce its planner, tracking stack, human study, or physical robots.
+              </p>
+            </fieldset>
+
             <fieldset>
               <legend>Raw dynamics transition rates</legend>
               <p class="control-help">
@@ -478,7 +557,7 @@
                 <input id="dynamics-cohesion" name="dynamics-cohesion" type="range" min="0" max="1" step="0.05" value="0">
               </div>
               <div class="dynamics-control">
-                <label for="dynamics-separation">Separation / enter Disperse <output id="dynamics-separation-value" for="dynamics-separation">0.00</output></label>
+                <label for="dynamics-separation">Enter Disperse rate <output id="dynamics-separation-value" for="dynamics-separation">0.00</output></label>
                 <input id="dynamics-separation" name="dynamics-separation" type="range" min="0" max="1" step="0.05" value="0">
               </div>
               <section class="dynamics-flow" aria-labelledby="dynamics-flow-title">
@@ -664,6 +743,7 @@
             <option value="raw_semantic_equivalent">Raw versus semantic: equivalent midpoint vector</option>
             <option value="raw_semantic_contrast">Raw versus semantic: intentionally different profiles</option>
             <option value="superposition_lease">Superposition versus exclusive lease</option>
+            <option value="soft_collision_free">Soft avoidance versus collision-free discs</option>
           </select>
           <label for="comparison-seed">Canonical decimal seed</label>
           <input id="comparison-seed" name="comparison-seed" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="20" value="2026">
@@ -813,6 +893,6 @@
     <noscript>
       <p class="noscript-note">JavaScript and WebAssembly are required for the interactive reconstruction.</p>
     </noscript>
-    <script type="module" src="./app.js?v=comparison-v1"></script>
+    <script type="module" src="./app.js?v=clearance-v1"></script>
   </body>
 </html>

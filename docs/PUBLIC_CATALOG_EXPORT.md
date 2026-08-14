@@ -7,7 +7,7 @@ private research-memory authority. The research memory remains authoritative;
 this repository owns only the reviewed public runtime copy.
 
 The transform is deliberately one-way. It accepts a caller-supplied tabular
-authority input, verifies its exact hash and row count, selects seven rows by
+authority input, verifies its exact hash and row count, selects eight rows by
 public source ID plus control family, and emits only the fields declared in
 `schemas/public-catalog.v1.schema.json`. It never records the input path.
 
@@ -32,7 +32,7 @@ demonstration is not relabelled as an evaluated participant outcome.
 
 The public transform does not emit local paths, source-note paths or filenames,
 private catalogue identifiers, internal commentary, credentials, participant
-data, or fields outside the versioned schema. Rows outside the seven-entry
+data, or fields outside the eight-entry
 profile are counted as rejected but are not copied into the repository.
 
 ## Reproduction and review
